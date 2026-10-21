@@ -250,3 +250,28 @@ select { background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xml
 .receipt-actions { display: flex; gap: 10px; }
 .receipt-actions .button { margin-top: 10px; width: 50%; }
 @media (max-width: 767px) { .action-cell .button { padding: 10px 0 !important; min-height: 40px; } .sticky-mobile { bottom: 16px; } body { padding-bottom: 90px; } }
+
+/* ===== V4.1 視覺調整 ===== */
+.brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 6px; }
+.brand-badge { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 12px; background: #3A7CB8; font-size: 20px; box-shadow: 0 4px 12px rgba(58,124,184,0.3); }
+.brand-sub { font-size: 0.9em; font-weight: 600; color: #5A6678; letter-spacing: 1px; }
+.stepper { list-style: none; display: flex; justify-content: space-between; gap: 6px; margin: 0 0 16px; padding: 0; position: relative; }
+.stepper li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; color: #6B7788; font-size: 0.85em; font-weight: 600; }
+.stepper li + li::before { content: ''; position: absolute; top: 15px; right: 50%; width: 100%; height: 2px; background: #E2E8F0; z-index: 0; }
+.stepper li.done + li::before, .stepper li.active::before { background: #3A7CB8; }
+.step-dot { position: relative; z-index: 1; width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: #fff; border: 2px solid #CBD5E0; color: #5A6678; }
+.stepper li.active .step-dot { background: #3A7CB8; border-color: #3A7CB8; color: #fff; box-shadow: 0 0 0 4px rgba(58,124,184,0.18); }
+.stepper li.done .step-dot { background: #2F855A; border-color: #2F855A; color: #fff; }
+.stepper li.done .step-dot::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #2F855A; border-radius: 50%; }
+.stepper li.active, .stepper li.done { color: #2D3748; }
+.review-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.stat { background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 10px 6px; text-align: center; }
+.stat-num { font-size: 1.6em; font-weight: 700; color: #2D3748; line-height: 1.1; }
+.stat-label { font-size: 0.8em; color: #5A6678; margin-top: 2px; }
+.stat-warn .stat-num { color: #8A5300; } .stat-ok .stat-num { color: #2F855A; } .stat-bad .stat-num { color: #D14343; }
+.review-filters { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid #CBD5E0; background: #fff; color: #4A5568; border-radius: 999px; padding: 8px 14px; min-height: 40px; font-family: inherit; font-size: 0.9em; cursor: pointer; }
+.chip.active { background: #3A7CB8; border-color: #3A7CB8; color: #fff; }
+.cell-sub { font-size: 0.8em; color: #5A6678; margin-top: 2px; font-weight: 400; }
+@media (max-width: 480px) { .review-stats { grid-template-columns: repeat(2, 1fr); } .step-name { font-size: 0.9em; } }
