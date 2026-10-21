@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>香山國小課後班報名系統</title>
+  <meta property="og:title" content="香山國小課後班報名系統">
+  <meta property="og:description" content="線上報名、查詢審查狀態與抽籤結果">
+  <meta name="theme-color" content="#3A7CB8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap">
+  <!-- 保留你原本用於抽籤截圖的函式庫 -->
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E📚%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="container">
+    <h1 id="system-title" class="title">載入中...</h1>
+    <div class="tabs">
+      <button class="tab-button active" onclick="showPage('registration')">報名</button>
+      <button class="tab-button" onclick="showPage('query')">查詢</button>
+    </div>
+    
+    <div id="registration-page" class="page active">
+      <div id="registrationStatusMessage" class="section hidden" style="text-align: center;">
+        <h3 id="statusText" style="color: #D14343;"></h3>
+        <p id="timeInfo" style="color: #6B7788; font-weight:500;"></p>
+      </div>
+      <div id="deadline-section" class="deadline-section hidden">
+        <span id="deadline-display" class="deadline-text"></span>
+        <span id="countdown" class="countdown"></span>
+      </div>
+      <div id="registrationFormContainer">
+        <div id="registration-form-area" class="section">
+          <div class="form-group">
+            <label for="parent-phone">家長電話號碼 <span class="required">*</span></label>
+            <input type="tel" id="parent-phone" maxlength="10" inputmode="numeric" pattern="[0-9]*" placeholder="請輸入 10 碼手機號碼">
+            <small aria-live="polite" class="error-message" id="parent-phone-error"></small>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="student-name">學生姓名 <span class="required">*</span></label>
+              <input type="text" id="student-name" placeholder="請輸入學生姓名">
+              <small aria-live="polite" class="error-message" id="student-name-error"></small>
+            </div>
+            <div class="form-group">
+              <label for="student-gender">學生性別 <span class="required">*</span></label>
+              <select id="student-gender">
+                <option value="">請選擇性別</option>
+              </select>
+              <small aria-live="polite" class="error-message" id="student-gender-error"></small>
+            </div>
+          </div>
+          <div class="form-group class-group">
+            <label>學生班級 <span class="required">*</span></label>
+            <div class="class-selects">
+              <select id="student-grade"><option value="">請選擇年級</option></select>
+              <select id="student-class" class="hidden"><option value="">請選擇班級</option></select>
+            </div>
+            <small aria-live="polite" class="error-message" id="student-class-error"></small>
+          </div>
+          <div id="priority-description" class="info-block hidden"></div>
+          <div class="form-group priority-upload-group">
+            <label for="student-priority">優先錄取資格 <span class="required">*</span></label>
+            <select id="student-priority"><option value="">請選擇</option></select>
+            <small aria-live="polite" class="error-message" id="student-priority-error"></small>
+          </div>
+          <div id="file-upload-area" class="form-group hidden">
+            <label for="priority-document" style="margin-bottom:5px;">證明文件上傳 <span class="required">*</span></label>
+            <div class="file-upload-wrapper">
+              <input type="file" id="priority-document" name="priorityDocumentFile" accept="image/*,application/pdf">
+              <div class="file-upload-text" id="file-upload-text">點擊或拖曳上傳證明文件<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span></div>
+            </div>
+            <small aria-live="polite" class="error-message" id="priority-document-error"></small>
+          </div>
+        </div>
+        <div id="announcement-a" class="announcement-area hidden"></div>
+        <button id="add-to-preview-button" class="button secondary">加入預覽名單</button>
+        <div id="preview-area" class="preview-area"></div>
+        <div id="consent-area" class="consent-area">
+          <label class="consent-row"><input type="checkbox" id="consent-checkbox"><span>我已了解：本表單蒐集之學生姓名、班級、聯絡電話及證明文件，僅用於課後班報名、資格審查與抽籤作業，作業完成後將依規定處理。</span></label>
+          <small aria-live="polite" class="error-message" id="consent-error"></small>
+        </div>
+        <div class="button-group hidden">
+          <button id="add-another-button" class="button secondary">繼續新增</button>
+          <button id="submit-registration-button" class="button primary">確認送出報名</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="query-page" class="page">
+      <div id="announcement-b" class="announcement-area hidden"></div>
+      <div class="section">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="query-phone">家長電話號碼 <span class="required">*</span></label>
+            <input type="tel" id="query-phone" maxlength="10" inputmode="numeric" pattern="[0-9]*" placeholder="請輸入 10 碼手機號碼">
+            <small aria-live="polite" class="error-message" id="query-phone-error"></small>
+          </div>
+          <div class="form-group" id="query-name-group">
+            <label for="query-name">學生姓名或報名編號 <span class="required">*</span></label>
+            <input type="text" id="query-name" placeholder="輸入孩子姓名即可（有編號也可輸入編號）">
+            <small aria-live="polite" class="error-message" id="query-name-error"></small>
+          </div>
+        </div>
+        <button id="query-button" class="button primary">查詢報名狀態</button>
+      </div>
+      <div id="query-results-area" class="query-results-area hidden">
+        <h3>查詢結果</h3>
+      </div>
+    </div>
+  </div>
+ 
+  <div id="admin-login-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content">
+      <button type="button" aria-label="關閉" class="close-button" onclick="document.getElementById('admin-login-modal').classList.add('hidden')">&times;</button>
+      <h3>管理員登入</h3>
+      <div class="form-group" style="text-align: left; margin-top:20px;">
+        <input type="password" id="admin-password" placeholder="請輸入管理員密碼" onkeydown="if(event.key==='Enter') handleAdminLogin()">
+      </div>
+      <button id="admin-login-btn" class="button primary">登入</button>
+    </div>
+  </div>
+ 
+  <div id="confirm-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content" style="max-width: 320px; padding-top: 40px;">
+      <p id="confirm-message"></p>
+      <div class="confirm-buttons">
+        <button id="confirm-no-btn" class="button secondary" style="width:45%; margin-top:0;">取消</button>
+        <button id="confirm-yes-btn" class="button primary" style="width:45%; margin-top:0;">確定</button>
+      </div>
+    </div>
+  </div>
+ 
+  <div id="resubmit-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content">
+      <button type="button" aria-label="關閉" class="close-button" onclick="document.getElementById('resubmit-modal').classList.add('hidden')">&times;</button>
+      <h3>上傳補件資料</h3>
+      <p style="font-size: 0.9em; color: #6B7788; margin-bottom: 20px;">請上傳新的證明文件，這將覆蓋原有的檔案。</p>
+      <div class="form-group" style="text-align:left;">
+        <div class="file-upload-wrapper">
+          <input type="file" id="resubmit-file" accept="image/*,application/pdf">
+          <div class="file-upload-text" id="resubmit-file-text">點擊或拖曳上傳補件資料<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span></div>
+        </div>
+      </div>
+      <button id="submit-resubmit-btn" class="button primary">確定上傳</button>
+    </div>
+  </div>
+ 
+  <div id="doc-preview-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content doc-modal-content">
+      <div class="doc-header">
+        <span>證明文件預覽</span>
+        <div style="display:flex; align-items:center;">
+          <a id="doc-fallback-link" href="#" target="_blank" class="doc-fallback-btn">在新視窗開啟</a>
+          <button type="button" aria-label="關閉" class="close-button" style="position: static; margin-left:10px;" onclick="closeDocPreview()">&times;</button>
+        </div>
+      </div>
+      <iframe id="doc-preview-frame" class="doc-frame" src=""></iframe>
+    </div>
+  </div>
+ 
+  <div id="admin-panel" class="admin-panel">
+    <div class="admin-header">
+      <h2>後台管理設定</h2>
+      <span class="admin-close" onclick="closeAdminPanel()">完成</span>
+    </div>
+    <div class="admin-content">
+      <div class="admin-tabs">
+        <div class="admin-tab active" onclick="showAdminTab('general')">系統設定</div>
+        <div class="admin-tab" onclick="showAdminTab('class')">班級管理</div>
+        <div class="admin-tab" onclick="showAdminTab('review')">資格審查</div>
+        <div class="admin-tab" onclick="showAdminTab('lottery')">抽籤系統</div>
+        <div class="admin-tab" onclick="showAdminTab('data')">資料庫重置</div>
+      </div>
+      <div id="admin-general" class="admin-page active">
+        <div class="section">
+          <div class="form-group"><label>系統標題</label><input type="text" id="adm-title"></div>
+          <div class="form-row">
+            <div class="form-group"><label>報名開始時間</label><input type="datetime-local" id="adm-start"></div>
+            <div class="form-group"><label>報名截止時間</label><input type="datetime-local" id="adm-end"></div>
+          </div>
+          <div class="form-group"><label>性別選項 (逗號分隔)</label><input type="text" id="adm-gender"></div>
+          <div class="form-group"><label>優先錄取資格選項 (逗號分隔)</label><input type="text" id="adm-prio-opt"></div>
+          <div class="form-group"><label>優先錄取說明 (可填寫 HTML)</label><textarea id="adm-prio-desc"></textarea></div>
+          <div class="form-group"><label>公告 A (顯示於報名頁)</label><textarea id="adm-ann-a"></textarea></div>
+          <div class="form-group"><label>公告 B (顯示於查詢頁)</label><textarea id="adm-ann-b"></textarea></div>
+          <div class="form-group"><label>Google Drive ID (證明文件資料夾)</label><input type="text" id="adm-drive"></div>
+          <div class="form-group"><label>Google Drive ID (抽籤圖檔資料夾)</label><input type="text" id="adm-lottery-drive"></div>
+          <div class="form-group">
+            <label>查詢時是否強制驗證學生姓名</label>
+            <select id="adm-req-name">
+              <option value="true">是 (高隱私：需輸入完全一致的姓名方能查詢)</option>
+              <option value="false">否 (高便利：僅輸入電話即可查詢名下所有子女)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>公開抽籤結果給家長查詢</label>
+            <select id="adm-publish">
+              <option value="false">否（抽籤結果尚未公開）</option>
+              <option value="true">是（家長可在查詢頁看到正取／備取）</option>
+            </select>
+          </div>
+          <button id="save-settings-btn" class="button primary">儲存設定</button>
+        </div>
+      </div>
+      <div id="admin-class" class="admin-page">
+        <div class="section">
+          <p style="color:#5A6678; font-size:0.9em; margin-bottom: 15px;">勾選欲開放報名的年級，並用逗號分隔班級名稱。</p>
+          <div style="overflow-x:auto;">
+            <table class="admin-table">
+              <thead><tr><th width="15%" style="text-align:center;">啟用</th><th width="25%">年級</th><th>班級列表</th><th width="15%"></th></tr></thead>
+              <tbody id="class-table-body"></tbody>
+            </table>
+          </div>
+          <div class="icon-btn add" onclick="addClassRow()">+ 新增年級</div>
+          <button id="save-classes-btn" class="button primary">儲存班級設定</button>
+        </div>
+      </div>
+      <div id="admin-review" class="admin-page">
+        <div class="section">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <p style="color:#5A6678; font-size:0.9em; margin:0;">審查勾選「優先錄取」之學生證件。</p>
+            <button id="refresh-review-btn" class="button secondary" style="width:auto; margin:0; padding:6px 12px; border-radius:10px;">重新整理</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="admin-table">
+              <thead><tr><th>姓名</th><th>班級</th><th>證明文件</th><th>目前狀態</th><th style="text-align:center;">審查操作</th></tr></thead>
+              <tbody id="review-table-body">
+                <tr><td colspan="5" style="text-align:center; padding: 20px;">載入中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="admin-lottery" class="admin-page">
+        <div class="section" style="padding: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">
+            <h3 style="margin:0; color:#2D3748;">抽籤作業</h3>
+            <button id="sound-toggle-btn" class="sound-toggle-btn" onclick="toggleSound()">
+              <span id="sound-icon">🔈</span> <span id="sound-text">音效開啟</span>
+            </button>
+          </div>
+          <div class="form-row" style="align-items: flex-end;">
+            <div class="form-group">
+              <label>選擇開獎年級</label>
+              <select id="lottery-grade-select" onchange="loadLotteryParticipants()"></select>
+            </div>
+            <div class="form-group">
+              <label>預計錄取人數</label>
+              <input type="number" id="lottery-count-input" value="25" min="1">
+            </div>
+            <div class="form-group" style="flex:2; display:flex; gap:10px;">
+              <button id="lottery-run-btn" class="button lottery-primary" style="margin-top:0;" onclick="runLottery()" disabled>開始抽籤</button>
+              <button id="lottery-download-btn" class="button lottery-secondary" style="margin-top:0;" onclick="downloadLotteryResult()" disabled>下載/雲端備份圖檔</button>
+            </div>
+          </div>
+          <div id="lottery-summary" class="info-block" style="background: rgba(0,0,0,0.02); color:#4A5568; border-left-color:#6B7788;">請選擇年級以載入報名數據...</div>
+        </div>
+        <div id="lottery-result-area" style="min-height: 250px; background: transparent; border: none; padding: 0; margin-top: 20px;">
+          <div style="text-align:center; color:#6B7788; padding-top: 50px;">等待抽籤...</div>
+        </div>
+      </div>
+      <div id="admin-data" class="admin-page">
+        <div class="section" style="border: 1px solid rgba(255, 139, 139, 0.3);">
+          <div style="background: rgba(255, 139, 139, 0.1); color: #B03030; padding: 20px; border-radius: 16px; margin-bottom: 20px;">
+            <h3 style="margin-top:0;">⚠️ 危險操作區</h3>
+            <p>執行此操作將會：</p>
+            <ol>
+              <li>清空試算表中所有報名記錄。</li>
+              <li>將 Google Drive 內的證明文件移至垃圾桶。</li>
+            </ol>
+            <p style="font-weight:700; margin-bottom:0;">此動作無法復原，僅在準備新學期/新梯次報名時使用。</p>
+          </div>
+          <button id="clear-all-data-btn" class="button danger">一鍵清空所有資料庫</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <a id="admin-trigger" onclick="document.getElementById('admin-login-modal').classList.remove('hidden')">管理員登入</a>
+ 
+  <div id="message-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content">
+      <button type="button" aria-label="關閉" class="close-button" onclick="hideModal()">&times;</button>
+      <div id="modal-message"></div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
