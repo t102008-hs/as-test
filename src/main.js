@@ -75,6 +75,46 @@ window.toggleSound = toggleSound;
 window.showDocPreview = showDocPreview;
 let lotteryAlreadyDrawn = false;
 let lastQueryPhone = '';
+let reviewCandidates = [];
+let reviewFilter = 'all';
+
+function updateStepper() {
+  const el = document.getElementById('stepper');
+  if (!el) return;
+  const phoneOk = /^09\d{8}$/.test((parentPhoneInput && parentPhoneInput.value || '').replace(/\D/g, ''));
+  const step = (typeof previewData !== 'undefined' && previewData.length > 0) ? 3 : (phoneOk ? 2 : 1);
+  el.querySelectorAll('li').forEach(li => {
+    const n = Number(li.dataset.step);
+    li.classList.toggle('done', n < step);
+    li.classList.toggle('active', n === step);
+    if (n === step) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+  });
+}
+
+function reviewGroup(status) {
+  if (status === '通過') return 'pass';
+  if (status === '不符合') return 'fail';
+  if (status === '請補件') return 'resubmit';
+  return 'pending';
+}
+
+function renderReviewStats() {
+  const box = document.getElementById('review-stats');
+  if (!box) return;
+  const n = { all: reviewCandidates.length, pending: 0, resubmit: 0, pass: 0, fail: 0 };
+  reviewCandidates.forEach(c => { n[reviewGroup(c.status)]++; });
+  box.innerHTML = [['待處理', n.pending, 'stat-warn'], ['需補件', n.resubmit, ''], ['已通過', n.pass, 'stat-ok'], ['不符合', n.fail, 'stat-bad']]
+    .map(([t, v, cls]) => `<div class="stat ${cls}"><div class="stat-num">${v}</div><div class="stat-label">${t}</div></div>`).join('');
+}
+
+function applyReviewFilter() {
+  const q = ((document.getElementById('review-search') || {}).value || '').trim().toLowerCase();
+  const list = reviewCandidates.filter(c => {
+    if (reviewFilter !== 'all' && reviewGroup(c.status) !== reviewFilter) return false;
+    return !q || [c.name, c.class, c.id].some(v => String(v || '').toLowerCase().includes(q));
+  });
+  renderReviewRows(list);
+}
 
 let settings = {};
 let classSettings = { grades: [], classes: {} };
@@ -221,7 +261,7 @@ function setupEventListeners() {
       if (this.files && this.files.length > 0) {
         fileUploadText.innerHTML = `<span style="color:#2F855A;">✅ 已選擇: ${escapeHTML(this.files[0].name)}</span>`;
       } else {
-        fileUploadText.innerHTML = `點擊或拖曳上傳證明文件<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span>`;
+        fileUploadText.innerHTML = `點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
       }
     });
   }
@@ -230,7 +270,7 @@ function setupEventListeners() {
       if (this.files && this.files.length > 0) {
         resubmitFileText.innerHTML = `<span style="color:#2F855A;">✅ 已選擇: ${escapeHTML(this.files[0].name)}</span>`;
       } else {
-        resubmitFileText.innerHTML = `點擊或拖曳上傳補件資料<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span>`;
+        resubmitFileText.innerHTML = `點擊或拖曳上傳補件資料<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
       }
     });
   }
@@ -256,6 +296,16 @@ function setupEventListeners() {
     const b = e.target.closest('.resubmit-btn');
     if (b) handleResubmitClick(b.dataset.phone, b.dataset.id);
   });
+  if (parentPhoneInput) parentPhoneInput.addEventListener('input', updateStepper);
+  const chips = document.getElementById('review-chips');
+  if (chips) chips.addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    reviewFilter = b.dataset.filter;
+    chips.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === b));
+    applyReviewFilter();
+  });
+  const rs = document.getElementById('review-search');
+  if (rs) rs.addEventListener('input', applyReviewFilter);
   const copyEl = document.getElementById('consent-checkbox');
   if (copyEl) copyEl.addEventListener('change', () => { document.getElementById('consent-error').textContent = ''; });
 }
@@ -371,7 +421,7 @@ function toggleFileUpload() {
     fileUploadArea.classList.add('hidden');
     if(priorityDocumentInput) {
       priorityDocumentInput.value = '';
-      fileUploadText.innerHTML = `點擊或拖曳上傳證明文件<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span>`;
+      fileUploadText.innerHTML = `點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
     }
   }
 }
@@ -458,7 +508,7 @@ function finishAddPreview() {
   if(fileUploadArea) fileUploadArea.classList.add('hidden');
   if(priorityDocumentInput) {
     priorityDocumentInput.value = '';
-    fileUploadText.innerHTML = `點擊或拖曳上傳證明文件<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span>`;
+    fileUploadText.innerHTML = `點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
   }
   setTimeout(() => {
     const previewEl = document.getElementById('preview-area');
@@ -467,6 +517,7 @@ function finishAddPreview() {
 }
 
 function renderPreview() {
+  updateStepper();
   if (!previewArea) return;
   previewArea.innerHTML = '';
   const title = document.createElement('h3'); title.textContent = '待送出的名單';
@@ -921,6 +972,12 @@ function loadReviewData() {
 }
 
 function renderReviewTable(candidates) {
+  reviewCandidates = candidates || [];
+  renderReviewStats();
+  applyReviewFilter();
+}
+
+function renderReviewRows(candidates) {
   const tbody = document.getElementById('review-table-body');
   tbody.innerHTML = '';
   if (candidates.length === 0) {
@@ -938,15 +995,15 @@ function renderReviewTable(candidates) {
       ? `<span class="doc-link" onclick="showDocPreview('${escapeHTML(String(c.fileLink))}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg> 檢視</span>`
       : '<span style="color:#c7c7cc;">無文件</span>';
     row.innerHTML = `
-    <td class="mobile-vertical"><strong>${escapeHTML(c.name)}</strong></td>
+    <td class="mobile-vertical"><strong>${escapeHTML(c.name)}</strong><div class="cell-sub">編號 ${escapeHTML(String(c.id || '-'))}${c.note ? ' ｜ ' + escapeHTML(String(c.note)) : ''}</div></td>
     <td class="mobile-vertical">${escapeHTML(c.class)}</td>
     <td class="mobile-vertical">${fileLink}</td>
     <td class="mobile-vertical"><span class="status-badge ${badgeClass}">${c.status}</span></td>
     <td class="action-cell">
       <div class="action-buttons">
-        <button class="button" style="width:auto; padding:6px 12px; font-size:0.85em; background:rgba(122,213,146,0.15); color:#2F855A; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '通過')">通過</button>
-        <button class="button" style="width:auto; padding:6px 12px; font-size:0.85em; background:rgba(108,166,217,0.15); color:#3A7CB8; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '請補件')">補件</button>
-        <button class="button" style="width:auto; padding:6px 12px; font-size:0.85em; background:rgba(255,139,139,0.15); color:#D14343; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '不符合')">退件</button>
+        <button class="button" style="width:auto; padding:10px 14px; font-size:0.9em; background:rgba(122,213,146,0.15); color:#2F855A; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '通過')">通過</button>
+        <button class="button" style="width:auto; padding:10px 14px; font-size:0.9em; background:rgba(108,166,217,0.15); color:#3A7CB8; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '請補件')">補件</button>
+        <button class="button" style="width:auto; padding:10px 14px; font-size:0.9em; background:rgba(255,139,139,0.15); color:#D14343; margin:0;" onclick="updateStatus(this, ${c.rowIndex}, '不符合')">退件</button>
       </div>
     </td>
     `;
@@ -970,6 +1027,9 @@ function updateStatus(btnElement, rowIndex, newStatus) {
         const badge = row.cells[3].querySelector('.status-badge');
         const map = { '通過': 'status-pass', '不符合': 'status-fail', '請補件': 'status-resubmit', '已補件': 'status-resubmitted' };
         if (badge) { badge.className = `status-badge ${map[newStatus] || 'status-pending'}`; badge.textContent = newStatus; }
+        const cand = reviewCandidates.find(x => x.rowIndex === rowIndex);
+        if (cand) cand.status = newStatus;
+        renderReviewStats();
       })
       .catch((e) => { buttons.forEach(b => b.disabled = false); showError(e); });
   });
