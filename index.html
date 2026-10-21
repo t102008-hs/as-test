@@ -15,6 +15,10 @@
 </head>
 <body>
   <div class="container">
+    <div class="brand">
+      <span class="brand-badge" aria-hidden="true">📚</span>
+      <span class="brand-sub">香山國小｜課後班線上服務</span>
+    </div>
     <h1 id="system-title" class="title">載入中...</h1>
     <div class="tabs">
       <button class="tab-button active" onclick="showPage('registration')">報名</button>
@@ -31,6 +35,11 @@
         <span id="countdown" class="countdown"></span>
       </div>
       <div id="registrationFormContainer">
+        <ol id="stepper" class="stepper" aria-label="報名進度">
+          <li data-step="1"><span class="step-dot">1</span><span class="step-name">家長電話</span></li>
+          <li data-step="2"><span class="step-dot">2</span><span class="step-name">孩子資料</span></li>
+          <li data-step="3"><span class="step-dot">3</span><span class="step-name">確認送出</span></li>
+        </ol>
         <div id="registration-form-area" class="section">
           <div class="form-group">
             <label for="parent-phone">家長電話號碼 <span class="required">*</span></label>
@@ -222,6 +231,17 @@
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <p style="color:#5A6678; font-size:0.9em; margin:0;">審查勾選「優先錄取」之學生證件。</p>
             <button id="refresh-review-btn" class="button secondary" style="width:auto; margin:0; padding:6px 12px; border-radius:10px;">重新整理</button>
+          </div>
+          <div id="review-stats" class="review-stats"></div>
+          <div class="review-filters">
+            <input type="search" id="review-search" placeholder="搜尋姓名、班級或編號">
+            <div id="review-chips" class="chips">
+              <button type="button" class="chip active" data-filter="all">全部</button>
+              <button type="button" class="chip" data-filter="pending">待處理</button>
+              <button type="button" class="chip" data-filter="resubmit">需補件</button>
+              <button type="button" class="chip" data-filter="pass">已通過</button>
+              <button type="button" class="chip" data-filter="fail">不符合</button>
+            </div>
           </div>
           <div style="overflow-x:auto;">
             <table class="admin-table">
