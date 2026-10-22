@@ -287,3 +287,12 @@ select { background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xml
 .radio-title { font-weight: 600; color: #2D3748; }
 .radio-sub { flex-basis: 100%; padding-left: 34px; font-size: 0.85em; color: #5A6678; }
 @media (min-width: 768px) { .step-actions { flex-direction: row-reverse; } .step-actions .button { width: auto; flex: 1; } .step-actions .button.text { flex: 0 0 auto; } }
+
+/* ===== V4.2.1 單選／勾選對齊修正 ===== */
+.radio-group .radio-card { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; font-weight: inherit; line-height: 1.4; }
+.radio-group .radio-card input[type="radio"],
+.consent-row input[type="checkbox"] { width: 22px; height: 22px; min-width: 22px; margin: 0; padding: 0; flex: 0 0 auto; border: none; background: transparent; box-shadow: none; }
+.radio-group .radio-card input[type="radio"]:focus,
+.consent-row input[type="checkbox"]:focus { background: transparent; box-shadow: none; }
+.radio-card:has(input:focus-visible) { outline: 3px solid #3A7CB8; outline-offset: 2px; }
+.consent-row { align-items: center; }
