@@ -661,15 +661,51 @@ function showReceipt(receipts) {
     </div>
     <p class="receipt-tip">編號不用刻意背：之後到「查詢」輸入手機號碼與孩子姓名，就能看到編號與結果。建議先把這張憑證存成圖片。</p>`;
   goStep(4);
+  receiptImage = null;
+  setTimeout(() => { buildReceiptImage().then(r => { receiptImage = r; }).catch(() => {}); }, 400);
 }
 
-function saveReceiptImage() {
+let receiptImage = null;
+
+// 先在背景把憑證轉成圖片，點「存成圖片」時才能立刻呼叫分享（iOS 要求在點擊當下）
+function buildReceiptImage() {
   const card = document.getElementById('receipt-card');
-  if (!window.html2canvas || !card) { alert('請直接截圖保存此畫面'); return; }
-  html2canvas(card, { scale: 2, backgroundColor: '#ffffff' }).then(c => {
+  if (!window.html2canvas || !card) return Promise.reject(new Error('no-html2canvas'));
+  return html2canvas(card, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => new Promise((res, rej) => {
+    canvas.toBlob(b => b ? res({ blob: b, dataUrl: canvas.toDataURL('image/png') }) : rej(new Error('toBlob')), 'image/png');
+  }));
+}
+
+function showReceiptImageModal(dataUrl) {
+  modalMessage.innerHTML = `<h3>長按圖片即可儲存</h3>
+    <img src="${dataUrl}" alt="報名憑證" style="width:100%; border-radius:12px; border:1px solid #E2E8F0; -webkit-touch-callout:default; -webkit-user-select:auto; user-select:auto;">
+    <p style="margin-top:12px; font-size:0.95em; color:#4A5568;">請用手指<strong>長按上方圖片</strong>，選擇「儲存圖片」或「加入照片」。若沒有出現選項，直接截圖也可以。</p>`;
+  messageModal.classList.remove('hidden');
+}
+
+async function saveReceiptImage() {
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+  let img = receiptImage;
+  if (!img) {
+    try { img = await buildReceiptImage(); receiptImage = img; }
+    catch (e) { alert('無法產生圖片，請直接截圖保存此畫面'); return; }
+  }
+  const file = new File([img.blob], '課後班報名憑證.png', { type: 'image/png' });
+  // 手機：開啟系統分享選單，可直接「儲存影像／儲存到相簿」
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: '課後班報名憑證' }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  // 電腦：直接下載
+  if (!isMobile) {
     const a = document.createElement('a');
-    a.download = '課後班報名憑證.png'; a.href = c.toDataURL('image/png'); a.click();
-  }).catch(() => alert('存圖失敗，請直接截圖保存此畫面'));
+    a.href = URL.createObjectURL(img.blob); a.download = '課後班報名憑證.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    return;
+  }
+  // 手機但不支援分享（例如 LINE 內建瀏覽器）：顯示圖片讓使用者長按儲存
+  showReceiptImageModal(img.dataUrl);
 }
 
 function handleQuery() {
