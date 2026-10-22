@@ -15,10 +15,6 @@
 </head>
 <body>
   <div class="container">
-    <div class="brand">
-      <span class="brand-badge" aria-hidden="true">📚</span>
-      <span class="brand-sub">香山國小｜課後班線上服務</span>
-    </div>
     <h1 id="system-title" class="title">載入中...</h1>
     <div class="tabs">
       <button class="tab-button active" onclick="showPage('registration')">報名</button>
@@ -35,65 +31,102 @@
         <span id="countdown" class="countdown"></span>
       </div>
       <div id="registrationFormContainer">
-        <ol id="stepper" class="stepper" aria-label="報名進度">
-          <li data-step="1"><span class="step-dot">1</span><span class="step-name">家長電話</span></li>
-          <li data-step="2"><span class="step-dot">2</span><span class="step-name">孩子資料</span></li>
-          <li data-step="3"><span class="step-dot">3</span><span class="step-name">確認送出</span></li>
-        </ol>
-        <div id="registration-form-area" class="section">
-          <div class="form-group">
-            <label for="parent-phone">家長電話號碼 <span class="required">*</span></label>
-            <input type="tel" id="parent-phone" maxlength="10" inputmode="numeric" pattern="[0-9]*" placeholder="請輸入 10 碼手機號碼">
-            <small aria-live="polite" class="error-message" id="parent-phone-error"></small>
-          </div>
-          <div class="form-row">
+
+        <!-- 第 1 步：家長聯絡方式 -->
+        <div id="step-1" class="reg-step active">
+          <div id="announcement-a" class="announcement-area hidden"></div>
+          <div class="section">
+            <h3 class="step-title">家長聯絡方式</h3>
             <div class="form-group">
-              <label for="student-name">學生姓名 <span class="required">*</span></label>
-              <input type="text" id="student-name" placeholder="請輸入學生姓名">
-              <small aria-live="polite" class="error-message" id="student-name-error"></small>
+              <label for="parent-phone">家長手機號碼 <span class="required">*</span></label>
+              <input type="tel" id="parent-phone" maxlength="10" inputmode="numeric" pattern="[0-9]*" placeholder="請輸入 10 碼手機號碼（09 開頭）">
+              <small aria-live="polite" class="error-message" id="parent-phone-error"></small>
+              <small class="field-hint">之後查詢報名結果時需要用到，請填寫您常用的號碼。</small>
             </div>
+          </div>
+          <button type="button" id="step1-next" class="button primary">下一步：填寫孩子資料</button>
+        </div>
+
+        <!-- 第 2 步：孩子資料（可新增多位） -->
+        <div id="step-2" class="reg-step">
+          <div id="added-children" class="added-children" aria-live="polite"></div>
+          <div class="section">
+            <h3 class="step-title" id="child-form-title">孩子資料（第 1 位）</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="student-name">學生姓名 <span class="required">*</span></label>
+                <input type="text" id="student-name" placeholder="請輸入學生姓名">
+                <small aria-live="polite" class="error-message" id="student-name-error"></small>
+              </div>
+              <div class="form-group">
+                <label for="student-gender">學生性別 <span class="required">*</span></label>
+                <select id="student-gender"><option value="">請選擇性別</option></select>
+                <small aria-live="polite" class="error-message" id="student-gender-error"></small>
+              </div>
+            </div>
+            <div class="form-group class-group">
+              <label>學生班級 <span class="required">*</span></label>
+              <div class="class-selects">
+                <select id="student-grade"><option value="">請選擇年級</option></select>
+                <select id="student-class" class="hidden"><option value="">請選擇班級</option></select>
+              </div>
+              <small aria-live="polite" class="error-message" id="student-class-error"></small>
+            </div>
+            <div id="priority-description" class="info-block hidden"></div>
             <div class="form-group">
-              <label for="student-gender">學生性別 <span class="required">*</span></label>
-              <select id="student-gender">
-                <option value="">請選擇性別</option>
-              </select>
-              <small aria-live="polite" class="error-message" id="student-gender-error"></small>
+              <label id="priority-label">優先錄取資格 <span class="required">*</span></label>
+              <div id="student-priority" class="radio-group" role="radiogroup" aria-labelledby="priority-label"></div>
+              <small aria-live="polite" class="error-message" id="student-priority-error"></small>
+            </div>
+            <div id="priority-category-group" class="form-group hidden">
+              <label id="priority-category-label">優先資格類別 <span class="required">*</span></label>
+              <div id="priority-category" class="radio-group" role="radiogroup" aria-labelledby="priority-category-label"></div>
+              <small aria-live="polite" class="error-message" id="priority-category-error"></small>
+            </div>
+            <div id="file-upload-area" class="form-group hidden">
+              <label for="priority-document" style="margin-bottom:5px;">證明文件上傳 <span class="required">*</span></label>
+              <div class="file-upload-wrapper">
+                <input type="file" id="priority-document" name="priorityDocumentFile" accept="image/*,application/pdf">
+                <div class="file-upload-text" id="file-upload-text">點擊拍照或選擇檔案</div>
+              </div>
+              <small aria-live="polite" class="error-message" id="priority-document-error"></small>
             </div>
           </div>
-          <div class="form-group class-group">
-            <label>學生班級 <span class="required">*</span></label>
-            <div class="class-selects">
-              <select id="student-grade"><option value="">請選擇年級</option></select>
-              <select id="student-class" class="hidden"><option value="">請選擇班級</option></select>
-            </div>
-            <small aria-live="polite" class="error-message" id="student-class-error"></small>
-          </div>
-          <div id="priority-description" class="info-block hidden"></div>
-          <div class="form-group priority-upload-group">
-            <label for="student-priority">優先錄取資格 <span class="required">*</span></label>
-            <select id="student-priority"><option value="">請選擇</option></select>
-            <small aria-live="polite" class="error-message" id="student-priority-error"></small>
-          </div>
-          <div id="file-upload-area" class="form-group hidden">
-            <label for="priority-document" style="margin-bottom:5px;">證明文件上傳 <span class="required">*</span></label>
-            <div class="file-upload-wrapper">
-              <input type="file" id="priority-document" name="priorityDocumentFile" accept="image/*,application/pdf">
-              <div class="file-upload-text" id="file-upload-text">點擊或拖曳上傳證明文件<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(支援圖片/PDF, 5MB內)</span></div>
-            </div>
-            <small aria-live="polite" class="error-message" id="priority-document-error"></small>
+          <small aria-live="polite" class="error-message" id="step2-error"></small>
+          <div class="step-actions">
+            <button type="button" id="add-another-button" class="button secondary">加入並再新增一位孩子</button>
+            <button type="button" id="step2-next" class="button primary">下一步：核對確認</button>
+            <button type="button" id="step2-back" class="button text">上一步：修改電話</button>
           </div>
         </div>
-        <div id="announcement-a" class="announcement-area hidden"></div>
-        <button id="add-to-preview-button" class="button secondary">加入預覽名單</button>
-        <div id="preview-area" class="preview-area"></div>
-        <div id="consent-area" class="consent-area">
-          <label class="consent-row"><input type="checkbox" id="consent-checkbox"><span>我已了解：本表單蒐集之學生姓名、班級、聯絡電話及證明文件，僅用於課後班報名、資格審查與抽籤作業，作業完成後將依規定處理。</span></label>
-          <small aria-live="polite" class="error-message" id="consent-error"></small>
+
+        <!-- 第 3 步：核對確認 -->
+        <div id="step-3" class="reg-step">
+          <div class="section">
+            <h3 class="step-title">請核對報名資料</h3>
+            <div class="review-phone-row"><span>家長手機</span><strong id="review-phone"></strong></div>
+            <div id="preview-area" class="preview-area"></div>
+          </div>
+          <div id="consent-area" class="consent-area">
+            <label class="consent-row"><input type="checkbox" id="consent-checkbox"><span>我已了解：本表單蒐集之學生姓名、班級、聯絡電話及證明文件，僅用於課後班報名、資格審查與抽籤作業，作業完成後將依規定處理。</span></label>
+            <small aria-live="polite" class="error-message" id="consent-error"></small>
+          </div>
+          <div class="step-actions">
+            <button type="button" id="submit-registration-button" class="button primary">確認送出報名</button>
+            <button type="button" id="step3-back" class="button text">返回修改／新增孩子</button>
+          </div>
         </div>
-        <div class="button-group hidden">
-          <button id="add-another-button" class="button secondary">繼續新增</button>
-          <button id="submit-registration-button" class="button primary">確認送出報名</button>
+
+        <!-- 第 4 步：完成 -->
+        <div id="step-4" class="reg-step">
+          <div id="receipt-area"></div>
+          <div class="step-actions">
+            <button type="button" id="receipt-save" class="button secondary">存成圖片</button>
+            <button type="button" id="receipt-go" class="button primary">前往查詢</button>
+            <button type="button" id="receipt-another" class="button text">再報名另一位孩子</button>
+          </div>
         </div>
+
       </div>
     </div>
     
@@ -191,6 +224,7 @@
           </div>
           <div class="form-group"><label>性別選項 (逗號分隔)</label><input type="text" id="adm-gender"></div>
           <div class="form-group"><label>優先錄取資格選項 (逗號分隔)</label><input type="text" id="adm-prio-opt"></div>
+          <div class="form-group"><label>優先資格類別 (逗號分隔，家長選「有」後以單選呈現；留空則不顯示)</label><input type="text" id="adm-prio-cat" placeholder="例如：低收入戶,中低收入戶,身心障礙,原住民"></div>
           <div class="form-group"><label>優先錄取說明 (可填寫 HTML)</label><textarea id="adm-prio-desc"></textarea></div>
           <div class="form-group"><label>公告 A (顯示於報名頁)</label><textarea id="adm-ann-a"></textarea></div>
           <div class="form-group"><label>公告 B (顯示於查詢頁)</label><textarea id="adm-ann-b"></textarea></div>
