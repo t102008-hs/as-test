@@ -76,20 +76,10 @@ window.showDocPreview = showDocPreview;
 let lotteryAlreadyDrawn = false;
 let lastQueryPhone = '';
 let reviewCandidates = [];
+let currentStep = 1;
+let lastRegPhone = '';
+const FILE_HINT = '點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>';
 let reviewFilter = 'all';
-
-function updateStepper() {
-  const el = document.getElementById('stepper');
-  if (!el) return;
-  const phoneOk = /^09\d{8}$/.test((parentPhoneInput && parentPhoneInput.value || '').replace(/\D/g, ''));
-  const step = (typeof previewData !== 'undefined' && previewData.length > 0) ? 3 : (phoneOk ? 2 : 1);
-  el.querySelectorAll('li').forEach(li => {
-    const n = Number(li.dataset.step);
-    li.classList.toggle('done', n < step);
-    li.classList.toggle('active', n === step);
-    if (n === step) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
-  });
-}
 
 function reviewGroup(status) {
   if (status === '通過') return 'pass';
@@ -155,11 +145,9 @@ const priorityDocumentInput = document.getElementById('priority-document');
 const fileUploadText = document.getElementById('file-upload-text');
 const announcementADiv = document.getElementById('announcement-a');
 const announcementBDiv = document.getElementById('announcement-b');
-const addToPreviewButton = document.getElementById('add-to-preview-button');
 const previewArea = document.getElementById('preview-area');
 const addAnotherButton = document.getElementById('add-another-button');
 const submitRegistrationButton = document.getElementById('submit-registration-button');
-const buttonGroup = document.querySelector('.button-group');
 const queryPhoneInput = document.getElementById('query-phone');
 const queryPhoneError = document.getElementById('query-phone-error');
 const queryNameGroup = document.getElementById('query-name-group');
@@ -274,8 +262,28 @@ function setupEventListeners() {
       }
     });
   }
-  if(addToPreviewButton) addToPreviewButton.addEventListener('click', handleAddToPreview);
-  if(addAnotherButton) addAnotherButton.addEventListener('click', handleAddAnother);
+  const $ = (id) => document.getElementById(id);
+  if ($('step1-next')) $('step1-next').addEventListener('click', handleStep1Next);
+  if (parentPhoneInput) parentPhoneInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleStep1Next(); });
+  if ($('add-another-button')) $('add-another-button').addEventListener('click', handleAddAnother);
+  if ($('step2-next')) $('step2-next').addEventListener('click', handleStep2Next);
+  if ($('step2-back')) $('step2-back').addEventListener('click', () => goStep(1));
+  if ($('step3-back')) $('step3-back').addEventListener('click', () => goStep(2));
+  ['added-children', 'preview-area'].forEach(id => {
+    const box = $(id);
+    if (box) box.addEventListener('click', (e) => {
+      const b = e.target.closest('.child-remove'); if (!b) return;
+      previewData.splice(parseInt(b.dataset.index, 10), 1);
+      renderPreview();
+      if (currentStep === 3 && previewData.length === 0) goStep(2);
+    });
+  });
+  if ($('receipt-save')) $('receipt-save').addEventListener('click', saveReceiptImage);
+  if ($('receipt-go')) $('receipt-go').addEventListener('click', () => {
+    showPage('query');
+    if (queryPhoneInput && lastRegPhone) queryPhoneInput.value = lastRegPhone;
+  });
+  if ($('receipt-another')) $('receipt-another').addEventListener('click', () => goStep(1));
   if(submitRegistrationButton) submitRegistrationButton.addEventListener('click', handleSubmitRegistration);
   if(queryButton) queryButton.addEventListener('click', handleQuery);
   if(adminLoginBtn) adminLoginBtn.addEventListener('click', handleAdminLogin);
@@ -296,7 +304,6 @@ function setupEventListeners() {
     const b = e.target.closest('.resubmit-btn');
     if (b) handleResubmitClick(b.dataset.phone, b.dataset.id);
   });
-  if (parentPhoneInput) parentPhoneInput.addEventListener('input', updateStepper);
   const chips = document.getElementById('review-chips');
   if (chips) chips.addEventListener('click', (e) => {
     const b = e.target.closest('.chip'); if (!b) return;
@@ -372,7 +379,8 @@ function loadSettings(loadedSettings) {
     priorityDescriptionDiv.classList.toggle('hidden', !settings.priorityDescription);
   }
   populateSelect(studentGenderSelect, settings.genderOptions);
-  populateSelect(studentPrioritySelect, settings.priorityOptions);
+  renderPriorityOptions();
+  renderPriorityCategories();
   if (announcementADiv) {
     announcementADiv.innerHTML = settings.announcementA || '';
     announcementADiv.classList.toggle('hidden', !settings.announcementA);
@@ -411,18 +419,31 @@ function updateClassOptions() {
   studentClassSelect.classList.toggle('hidden', classes.length === 0);
 }
 
+function getRadio(box) { const r = box && box.querySelector('input:checked'); return r ? r.value : ''; }
+function clearRadios(box) { if (box) box.querySelectorAll('input').forEach(i => { i.checked = false; }); }
+function priorityLabel(o) { return o === '有' ? '有，我要申請優先錄取' : (o === '無' ? '無，一般報名' : o); }
+
+function renderPriorityOptions() {
+  if (!studentPrioritySelect) return;
+  studentPrioritySelect.innerHTML = (settings.priorityOptions || []).map(o =>
+    `<label class="radio-card"><input type="radio" name="priority" value="${escapeHTML(o)}"><span class="radio-title">${escapeHTML(priorityLabel(o))}</span>${o === '有' ? '<span class="radio-sub">需上傳證明文件，經審查通過才享優先</span>' : ''}</label>`).join('');
+}
+function renderPriorityCategories() {
+  const box = document.getElementById('priority-category');
+  if (!box) return;
+  box.innerHTML = (settings.priorityCategories || []).map(c =>
+    `<label class="radio-card"><input type="radio" name="priorityCategory" value="${escapeHTML(c)}"><span class="radio-title">${escapeHTML(c)}</span></label>`).join('');
+}
+
 function toggleFileUpload() {
-  if (!studentPrioritySelect || !fileUploadArea) return;
-  const selectedValue = studentPrioritySelect.value;
-  const hasPriorityOption = (settings.priorityOptions || []).find(opt => opt === '有');
-  if (selectedValue === hasPriorityOption && selectedValue !== "") {
-    fileUploadArea.classList.remove('hidden');
-  } else {
-    fileUploadArea.classList.add('hidden');
-    if(priorityDocumentInput) {
-      priorityDocumentInput.value = '';
-      fileUploadText.innerHTML = `點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
-    }
+  const yes = getRadio(studentPrioritySelect) === '有';
+  const hasCats = (settings.priorityCategories || []).length > 0;
+  const catGroup = document.getElementById('priority-category-group');
+  if (catGroup) catGroup.classList.toggle('hidden', !(yes && hasCats));
+  if (fileUploadArea) fileUploadArea.classList.toggle('hidden', !yes);
+  if (!yes) {
+    clearRadios(document.getElementById('priority-category'));
+    if (priorityDocumentInput) { priorityDocumentInput.value = ''; if (fileUploadText) fileUploadText.innerHTML = FILE_HINT; }
   }
 }
 
@@ -447,7 +468,41 @@ function sanitizePhoneNumber(event) {
   }
 }
 
-async function handleAddToPreview() {
+// ---------- 分步流程 ----------
+function formatPhone(p) { return String(p).replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3'); }
+
+function goStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.reg-step').forEach(el => el.classList.toggle('active', el.id === 'step-' + n));
+  const rp = document.getElementById('review-phone');
+  if (rp) rp.textContent = formatPhone(parentPhoneInput.value.replace(/\D/g, ''));
+  renderPreview();
+  const top = document.querySelector('.container');
+  if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function handleStep1Next() {
+  resetErrorMessages();
+  const phone = parentPhoneInput.value.replace(/\D/g, '').trim();
+  if (!/^09\d{8}$/.test(phone)) {
+    parentPhoneError.textContent = '請輸入 09 開頭的 10 碼手機號碼';
+    parentPhoneInput.focus();
+    return;
+  }
+  goStep(2);
+}
+
+function childFormDirty() {
+  return !!(studentNameInput.value.trim() || studentGenderSelect.value || studentGradeSelect.value ||
+    getRadio(studentPrioritySelect) || (priorityDocumentInput && priorityDocumentInput.files.length));
+}
+
+function setStep2Busy(b) {
+  ['add-another-button', 'step2-next', 'step2-back'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = b; });
+}
+
+// 驗證並把目前表單的孩子加入名單；成功回傳 true
+async function addChildFromForm() {
   resetErrorMessages();
   const phone = parentPhoneInput.value.replace(/\D/g, '').trim();
   const name = studentNameInput.value.trim();
@@ -455,137 +510,106 @@ async function handleAddToPreview() {
   const needClass = !studentClassSelect.classList.contains('hidden');
   const classVal = needClass ? studentClassSelect.value : '';
   const gender = studentGenderSelect.value;
-  const priority = studentPrioritySelect.value;
+  const priority = getRadio(studentPrioritySelect);
+  const catBox = document.getElementById('priority-category');
+  const category = getRadio(catBox);
+  const needCategory = priority === '有' && (settings.priorityCategories || []).length > 0;
+  const catErr = document.getElementById('priority-category-error');
 
   const checks = [
-    [!/^09\d{8}$/.test(phone), parentPhoneError, '請輸入 09 開頭的 10 碼手機號碼', parentPhoneInput],
     [!name, studentNameError, '請輸入學生姓名', studentNameInput],
     [!gender, studentGenderError, '請選擇性別', studentGenderSelect],
     [!grade, studentClassError, '請選擇年級', studentGradeSelect],
     [!!grade && needClass && !classVal, studentClassError, '請選擇班級', studentClassSelect],
-    [!priority, studentPriorityError, '請選擇是否具優先錄取資格', studentPrioritySelect]
+    [!priority, studentPriorityError, '請選擇是否具優先錄取資格', studentPrioritySelect.querySelector('input')],
+    [needCategory && !category, catErr, '請選擇優先資格類別', catBox && catBox.querySelector('input')]
   ];
   let firstBad = null;
   checks.forEach(([bad, errEl, msg, inputEl]) => {
     if (bad) { if (errEl && !errEl.textContent) errEl.textContent = msg; if (!firstBad) firstBad = inputEl; }
   });
-  const hasPriorityOption = (settings.priorityOptions || []).find(opt => opt === '有');
-  const needsFile = priority !== '' && priority === hasPriorityOption;
+  const needsFile = priority === '有';
   const rawFile = (priorityDocumentInput && priorityDocumentInput.files.length > 0) ? priorityDocumentInput.files[0] : null;
   const fileErr = document.getElementById('priority-document-error');
   if (!firstBad && needsFile && !rawFile) {
     if (fileErr) fileErr.textContent = '請上傳證明文件（可直接拍照）';
     firstBad = priorityDocumentInput;
   }
-  if (firstBad) { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); firstBad.focus(); return; }
+  if (firstBad) { firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' }); firstBad.focus(); return false; }
 
   const studentClass = classVal ? `${grade}${classVal}` : grade;
   if (previewData.some(s => s.name === name && s.class === studentClass)) {
-    studentNameError.textContent = `「${name}」已在待送出的名單中`;
+    studentNameError.textContent = `「${name}」已在名單中`;
+    studentNameInput.focus();
+    return false;
+  }
+  setStep2Busy(true);
+  try {
+    const file = needsFile ? await prepareFile(rawFile) : null;
+    previewData.push({ phone, name, grade, classVal, class: studentClass, gender, priority, priorityCategory: category, file });
+    resetChildForm();
+    renderPreview();
+    return true;
+  } catch (e) {
+    if (fileErr) fileErr.textContent = e.message;
+    if (priorityDocumentInput) priorityDocumentInput.focus();
+    return false;
+  } finally { setStep2Busy(false); }
+}
+
+function resetChildForm() {
+  studentNameInput.value = '';
+  studentGradeSelect.value = '';
+  studentClassSelect.value = ''; studentClassSelect.classList.add('hidden');
+  studentGenderSelect.value = '';
+  clearRadios(studentPrioritySelect);
+  toggleFileUpload();
+}
+
+async function handleAddAnother() {
+  const ok = await addChildFromForm();
+  if (ok) { studentNameInput.focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+}
+
+async function handleStep2Next() {
+  const err = document.getElementById('step2-error');
+  if (err) err.textContent = '';
+  if (childFormDirty()) {
+    if (!(await addChildFromForm())) return;
+  } else if (previewData.length === 0) {
+    if (err) err.textContent = '請先填寫孩子資料';
     studentNameInput.focus();
     return;
   }
-
-  addToPreviewButton.disabled = true;
-  try {
-    const file = needsFile ? await prepareFile(rawFile) : null;
-    previewData.push({ phone, name, grade, classVal, class: studentClass, gender, priority, file });
-    finishAddPreview();
-  } catch (e) {
-    if (fileErr) fileErr.textContent = e.message;
-    addToPreviewButton.disabled = false;
-  }
+  goStep(3);
 }
 
-function finishAddPreview() {
-  addToPreviewButton.disabled = false;
-  renderPreview();
-  if(studentNameInput) studentNameInput.value = '';
-  if(studentGradeSelect) studentGradeSelect.value = '';
-  if(studentClassSelect) { studentClassSelect.value = ''; studentClassSelect.classList.add('hidden'); }
-  if(studentGenderSelect) studentGenderSelect.value = '';
-  if(studentPrioritySelect) studentPrioritySelect.value = '';
-  if(fileUploadArea) fileUploadArea.classList.add('hidden');
-  if(priorityDocumentInput) {
-    priorityDocumentInput.value = '';
-    fileUploadText.innerHTML = `點擊拍照或選擇檔案<br><span style="font-size:0.8em; color:#6B7788; font-weight:normal;">(圖片會自動縮小；PDF 請小於 2.5MB)</span>`;
-  }
-  setTimeout(() => {
-    const previewEl = document.getElementById('preview-area');
-    if (previewEl) previewEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 100);
+function childCardHtml(s, i) {
+  const pr = s.priority === '有'
+    ? '申請優先錄取' + (s.priorityCategory ? '（' + s.priorityCategory + '）' : '') + (s.file ? '・已附文件' : '')
+    : '一般報名';
+  return `<div class="child-card"><div class="child-main"><strong>${escapeHTML(s.name)}</strong><span>${escapeHTML(s.class)}・${escapeHTML(s.gender)}</span><span class="child-sub">${escapeHTML(pr)}</span></div><button type="button" class="child-remove" data-index="${i}" aria-label="移除 ${escapeHTML(s.name)}">移除</button></div>`;
 }
 
 function renderPreview() {
-  updateStepper();
-  if (!previewArea) return;
-  previewArea.innerHTML = '';
-  const title = document.createElement('h3'); title.textContent = '待送出的名單';
-  const placeholder = document.createElement('p'); placeholder.classList.add('placeholder-text'); placeholder.textContent = '請填寫上方資料並點擊加入預覽';
-  previewArea.appendChild(title);
-  previewArea.appendChild(placeholder);
- 
-  const isDesktop = window.matchMedia("(min-width: 768px)").matches;
-  if (previewData.length === 0) {
-    previewArea.classList.remove('has-content');
-    if (buttonGroup) buttonGroup.classList.add('hidden');
-    if (submitRegistrationButton) submitRegistrationButton.classList.remove('sticky-mobile');
-    return;
-  }
- 
-  previewArea.classList.add('has-content');
-  if (buttonGroup) buttonGroup.classList.remove('hidden');
- 
-  if (!isDesktop && submitRegistrationButton) {
-    submitRegistrationButton.classList.add('sticky-mobile');
-  } else {
-    submitRegistrationButton.classList.remove('sticky-mobile');
-  }
-  if (isDesktop) {
-    const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>姓名</th><th>班級</th><th>性別</th><th>資格</th><th>操作</th></tr></thead><tbody></tbody>`;
-    const tbody = table.querySelector('tbody');
-    previewData.forEach((s, i) => {
-      const row = document.createElement('tr');
-      row.innerHTML = `<td>${escapeHTML(s.name)}</td><td>${escapeHTML(s.class)}</td><td>${escapeHTML(s.gender)}</td><td>${escapeHTML(s.priority)}</td><td class="delete-cell"><div class="delete-button" data-index="${i}">&times;</div></td>`;
-      tbody.appendChild(row);
-    });
-    previewArea.appendChild(table);
-  } else {
-    previewData.forEach((s, i) => {
-      const card = document.createElement('div'); card.classList.add('preview-card');
-      card.innerHTML = `<div class="data-row"><span class="label">姓名</span><span class="value">${escapeHTML(s.name)}</span></div>
-      <div class="data-row"><span class="label">班級</span><span class="value">${escapeHTML(s.class)}</span></div>
-      <div class="data-row"><span class="label">資格</span><span class="value">${escapeHTML(s.priority)}</span></div>
-      <div class="delete-button" data-index="${i}">&times;</div>`;
-      previewArea.appendChild(card);
-    });
-  }
-  previewArea.querySelectorAll('.delete-button').forEach(btn => btn.addEventListener('click', handleDeletePreviewItem));
-}
-
-function handleDeletePreviewItem(e) {
-  const idx = parseInt(e.target.dataset.index, 10);
-  if (!isNaN(idx)) {
-    previewData.splice(idx, 1);
-    renderPreview();
-  }
-}
-
-function handleAddAnother() {
-  resetErrorMessages();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const html = previewData.map(childCardHtml).join('');
+  const added = document.getElementById('added-children');
+  if (added) added.innerHTML = previewData.length ? `<h3 class="step-title">已加入的孩子（${previewData.length} 位）</h3>${html}` : '';
+  if (previewArea) previewArea.innerHTML = previewData.length ? html : '<p class="placeholder-text">還沒有加入任何孩子</p>';
+  const t = document.getElementById('child-form-title');
+  if (t) t.textContent = `孩子資料（第 ${previewData.length + 1} 位）`;
 }
 
 async function handleSubmitRegistration() {
-  if (previewData.length === 0) { showModal('請先加入學生'); return; }
+  if (previewData.length === 0) { goStep(2); return; }
   const consent = document.getElementById('consent-checkbox');
   if (consent && !consent.checked) {
     document.getElementById('consent-error').textContent = '請先勾選同意上方說明';
     consent.focus();
     return;
   }
-  const students = previewData.map(s => ({ phone: s.phone, name: s.name, grade: s.grade, classVal: s.classVal, gender: s.gender, priority: s.priority, file: s.file }));
+  const phone = parentPhoneInput.value.replace(/\D/g, '').trim();
+  const students = previewData.map(s => ({ phone, name: s.name, grade: s.grade, classVal: s.classVal, gender: s.gender, priority: s.priority, priorityCategory: s.priorityCategory, file: s.file }));
   if (JSON.stringify(students).length > 4.2 * 1024 * 1024) {
     showModal('附件總量過大，請分次送出（每次先送 1～2 位有附件的孩子）。');
     return;
@@ -593,40 +617,41 @@ async function handleSubmitRegistration() {
   submitRegistrationButton.disabled = true;
   showLoadingModal(students.some(s => s.file) ? '正在送出報名並上傳文件<br><span style="font-size:0.8em;font-weight:normal;color:#5A6678;">請勿關閉視窗</span>' : '正在送出報名');
   try {
-    handleRegistrationResponse(await callBackend('processRegistration', { students }));
+    handleRegistrationResponse(await callBackend('processRegistration', { students }), phone);
   } catch (e) {
     submitRegistrationButton.disabled = false;
-    if (e.payload) { handleRegistrationResponse(e.payload); return; }
+    if (e.payload) { handleRegistrationResponse(e.payload, phone); return; }
     const unsure = /逾時|無法連線/.test(e.message) ? '<br><br><span style="font-size:0.9em;">若不確定是否已送出，請先到「查詢」確認，避免重複報名。</span>' : '';
     showModal('<h3 style="color:#D14343">無法送出</h3>' + escapeHTML(e.message) + unsure);
   }
 }
 
-function handleRegistrationResponse(response) {
+function handleRegistrationResponse(response, phone) {
   submitRegistrationButton.disabled = false;
   if (loadingInterval) clearInterval(loadingInterval);
   if (response.success) {
-    const phone = previewData.length ? previewData[0].phone : '';
+    lastRegPhone = phone || '';
     previewData = [];
-    renderPreview();
-    if (parentPhoneInput) parentPhoneInput.value = '';
+    parentPhoneInput.value = '';
     const consent = document.getElementById('consent-checkbox');
     if (consent) consent.checked = false;
-    showReceipt(response.receipts || [], phone);
+    showReceipt(response.receipts || []);
     return;
   }
   if (response.failedStudents && response.failedStudents.length > 0) {
-    previewData = previewData.filter(s => !response.failedStudents.some(f => f.name === s.name && f.class === s.class && f.phone === s.phone));
+    previewData = previewData.filter(s => !response.failedStudents.some(f => f.name === s.name && f.class === s.class));
     renderPreview();
+    if (previewData.length === 0) goStep(2);
   }
   showModal('<h3 style="color:#D14343">無法送出</h3>' + escapeHTML(response.message || '發生錯誤'));
 }
 
-// 報名成功憑證：不要求家長背編號，可截圖/存圖，之後用「手機+孩子姓名」也能查到
-function showReceipt(receipts, phone) {
+// 第 4 步：完成畫面（報名憑證）。不要求家長背編號，之後用「手機＋孩子姓名」也查得到
+function showReceipt(receipts) {
+  hideModal();
   const rows = receipts.map(r => `<div class="receipt-row"><span>${escapeHTML(r.name)}（${escapeHTML(r.class)}）</span><strong class="receipt-id">${escapeHTML(r.id)}</strong></div>`).join('');
   const time = new Date().toLocaleString('zh-TW', { hour12: false });
-  modalMessage.innerHTML = `
+  document.getElementById('receipt-area').innerHTML = `
     <div id="receipt-card" class="receipt-card">
       <h3>報名成功</h3>
       <p class="receipt-sub">${escapeHTML(settings.title || '')}</p>
@@ -634,24 +659,17 @@ function showReceipt(receipts, phone) {
       ${rows}
       <p class="receipt-time">${escapeHTML(time)}</p>
     </div>
-    <p class="receipt-tip">編號不用刻意背：之後到「查詢」輸入手機號碼與孩子姓名，就能看到編號與結果。建議先把這張憑證存成圖片。</p>
-    <div class="receipt-actions">
-      <button type="button" class="button secondary" id="receipt-save">存成圖片</button>
-      <button type="button" class="button primary" id="receipt-go">前往查詢</button>
-    </div>`;
-  messageModal.classList.remove('hidden');
-  document.getElementById('receipt-save').onclick = () => {
-    const card = document.getElementById('receipt-card');
-    if (!window.html2canvas || !card) { alert('請直接截圖保存此畫面'); return; }
-    html2canvas(card, { scale: 2, backgroundColor: '#ffffff' }).then(c => {
-      const a = document.createElement('a');
-      a.download = '課後班報名憑證.png'; a.href = c.toDataURL('image/png'); a.click();
-    }).catch(() => alert('存圖失敗，請直接截圖保存此畫面'));
-  };
-  document.getElementById('receipt-go').onclick = () => {
-    hideModal(); showPage('query');
-    if (queryPhoneInput && phone) queryPhoneInput.value = phone;
-  };
+    <p class="receipt-tip">編號不用刻意背：之後到「查詢」輸入手機號碼與孩子姓名，就能看到編號與結果。建議先把這張憑證存成圖片。</p>`;
+  goStep(4);
+}
+
+function saveReceiptImage() {
+  const card = document.getElementById('receipt-card');
+  if (!window.html2canvas || !card) { alert('請直接截圖保存此畫面'); return; }
+  html2canvas(card, { scale: 2, backgroundColor: '#ffffff' }).then(c => {
+    const a = document.createElement('a');
+    a.download = '課後班報名憑證.png'; a.href = c.toDataURL('image/png'); a.click();
+  }).catch(() => alert('存圖失敗，請直接截圖保存此畫面'));
 }
 
 function handleQuery() {
@@ -876,6 +894,7 @@ function onAdminLoginSuccess(data) {
   document.getElementById('adm-end').value = s.endTime;
   document.getElementById('adm-gender').value = s.genderOptions;
   document.getElementById('adm-prio-opt').value = s.priorityOptions;
+  document.getElementById('adm-prio-cat').value = s.priorityCategories || '';
   document.getElementById('adm-prio-desc').value = s.priorityDesc;
   document.getElementById('adm-ann-a').value = s.announcementA;
   document.getElementById('adm-ann-b').value = s.announcementB;
@@ -995,7 +1014,7 @@ function renderReviewRows(candidates) {
       ? `<span class="doc-link" onclick="showDocPreview('${escapeHTML(String(c.fileLink))}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg> 檢視</span>`
       : '<span style="color:#c7c7cc;">無文件</span>';
     row.innerHTML = `
-    <td class="mobile-vertical"><strong>${escapeHTML(c.name)}</strong><div class="cell-sub">編號 ${escapeHTML(String(c.id || '-'))}${c.note ? ' ｜ ' + escapeHTML(String(c.note)) : ''}</div></td>
+    <td class="mobile-vertical"><strong>${escapeHTML(c.name)}</strong><div class="cell-sub">編號 ${escapeHTML(String(c.id || '-'))}${c.category ? ' ｜ ' + escapeHTML(String(c.category)) : ''}${c.note ? ' ｜ ' + escapeHTML(String(c.note)) : ''}</div></td>
     <td class="mobile-vertical">${escapeHTML(c.class)}</td>
     <td class="mobile-vertical">${fileLink}</td>
     <td class="mobile-vertical"><span class="status-badge ${badgeClass}">${c.status}</span></td>
@@ -1311,6 +1330,7 @@ function handleSaveSettings() {
       endTime: document.getElementById('adm-end').value,
       genderOptions: document.getElementById('adm-gender').value,
       priorityOptions: document.getElementById('adm-prio-opt').value,
+      priorityCategories: document.getElementById('adm-prio-cat').value,
       priorityDesc: document.getElementById('adm-prio-desc').value,
       announcementA: document.getElementById('adm-ann-a').value,
       announcementB: document.getElementById('adm-ann-b').value,
