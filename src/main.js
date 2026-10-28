@@ -2,7 +2,7 @@ import './style.css';
 
 // ================= API 連線封裝 =================
 // 前端只呼叫同網域的 /api/gas（Vercel Serverless），Token 不再出現在前端程式碼中。
-async function callBackend(action, data = {}) {
+async function callBackend(action, data = {}, extra = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   let res;
@@ -10,7 +10,7 @@ async function callBackend(action, data = {}) {
     res = await fetch('/api/gas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, data }),
+      body: JSON.stringify({ action, data, idToken: adminIdToken || undefined, ...extra }),
       signal: ctrl.signal
     });
   } catch (e) {
@@ -18,6 +18,11 @@ async function callBackend(action, data = {}) {
   } finally { clearTimeout(timer); }
   let json;
   try { json = await res.json(); } catch (e) { throw new Error('系統目前較忙碌，請等 1 分鐘後再試。'); }
+  if (res.status === 401) {
+    adminIdToken = '';
+    const lm = document.getElementById('admin-login-modal');
+    if (lm) { lm.classList.remove('hidden'); renderGoogleButton(); }
+  }
   if (json.success === false) {
     const err = new Error(json.message || '發生錯誤');
     err.payload = json;
@@ -111,7 +116,18 @@ let classSettings = { grades: [], classes: {} };
 let previewData = [];
 let countdownInterval;
 let messageModalTimeout;
-let adminPassword = '';
+let adminIdToken = '';
+let googleInited = false;
+let turnstileWidgetId = null;
+let turnstileToken = '';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
+let h2cPromise = null;
+// html2canvas 改由 npm 打包，按需載入（不再從外部網站載入）
+function loadHtml2canvas() {
+  if (!h2cPromise) h2cPromise = import('html2canvas').then(mod => mod.default);
+  return h2cPromise;
+}
 let pendingUpdateAction = null;
 let currentResubmitData = null;
 let loadingInterval;
@@ -286,7 +302,12 @@ function setupEventListeners() {
   if ($('receipt-another')) $('receipt-another').addEventListener('click', () => goStep(1));
   if(submitRegistrationButton) submitRegistrationButton.addEventListener('click', handleSubmitRegistration);
   if(queryButton) queryButton.addEventListener('click', handleQuery);
-  if(adminLoginBtn) adminLoginBtn.addEventListener('click', handleAdminLogin);
+  const adminTrigger = document.getElementById('admin-trigger');
+  const openAdminLogin = () => { document.getElementById('admin-login-modal').classList.remove('hidden'); renderGoogleButton(); };
+  if (adminTrigger) {
+    adminTrigger.addEventListener('click', openAdminLogin);
+    adminTrigger.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAdminLogin(); } });
+  }
   if(saveSettingsBtn) saveSettingsBtn.addEventListener('click', handleSaveSettings);
   if(saveClassesBtn) saveClassesBtn.addEventListener('click', handleSaveClasses);
   if(refreshReviewBtn) refreshReviewBtn.addEventListener('click', loadReviewData);
@@ -477,8 +498,27 @@ function goStep(n) {
   const rp = document.getElementById('review-phone');
   if (rp) rp.textContent = formatPhone(parentPhoneInput.value.replace(/\D/g, ''));
   renderPreview();
+  if (n === 3) renderTurnstile();
   const top = document.querySelector('.container');
   if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderTurnstile(n = 0) {
+  const box = document.getElementById('turnstile-box');
+  if (!box || !TURNSTILE_SITE_KEY) return;
+  if (!window.turnstile) { if (n < 20) setTimeout(() => renderTurnstile(n + 1), 500); return; }
+  if (turnstileWidgetId !== null) { window.turnstile.reset(turnstileWidgetId); turnstileToken = ''; return; }
+  turnstileWidgetId = window.turnstile.render(box, {
+    sitekey: TURNSTILE_SITE_KEY,
+    language: 'zh-tw',
+    callback: (t) => { turnstileToken = t; const e = document.getElementById('turnstile-error'); if (e) e.textContent = ''; },
+    'expired-callback': () => { turnstileToken = ''; },
+    'error-callback': () => { turnstileToken = ''; }
+  });
+}
+function resetTurnstile() {
+  turnstileToken = '';
+  if (turnstileWidgetId !== null && window.turnstile) window.turnstile.reset(turnstileWidgetId);
 }
 
 function handleStep1Next() {
@@ -608,6 +648,8 @@ async function handleSubmitRegistration() {
     consent.focus();
     return;
   }
+  const tErr = document.getElementById('turnstile-error');
+  if (TURNSTILE_SITE_KEY && !turnstileToken) { if (tErr) tErr.textContent = '請先完成上方的人機驗證'; return; }
   const phone = parentPhoneInput.value.replace(/\D/g, '').trim();
   const students = previewData.map(s => ({ phone, name: s.name, grade: s.grade, classVal: s.classVal, gender: s.gender, priority: s.priority, priorityCategory: s.priorityCategory, file: s.file }));
   if (JSON.stringify(students).length > 4.2 * 1024 * 1024) {
@@ -617,7 +659,8 @@ async function handleSubmitRegistration() {
   submitRegistrationButton.disabled = true;
   showLoadingModal(students.some(s => s.file) ? '正在送出報名並上傳文件<br><span style="font-size:0.8em;font-weight:normal;color:#5A6678;">請勿關閉視窗</span>' : '正在送出報名');
   try {
-    handleRegistrationResponse(await callBackend('processRegistration', { students }), phone);
+    const tt = turnstileToken; resetTurnstile();
+    handleRegistrationResponse(await callBackend('processRegistration', { students }, { turnstileToken: tt }), phone);
   } catch (e) {
     submitRegistrationButton.disabled = false;
     if (e.payload) { handleRegistrationResponse(e.payload, phone); return; }
@@ -670,8 +713,8 @@ let receiptImage = null;
 // 先在背景把憑證轉成圖片，點「存成圖片」時才能立刻呼叫分享（iOS 要求在點擊當下）
 function buildReceiptImage() {
   const card = document.getElementById('receipt-card');
-  if (!window.html2canvas || !card) return Promise.reject(new Error('no-html2canvas'));
-  return html2canvas(card, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => new Promise((res, rej) => {
+  if (!card) return Promise.reject(new Error('no-card'));
+  return loadHtml2canvas().then(h2c => h2c(card, { scale: 2, backgroundColor: '#ffffff' })).then(canvas => new Promise((res, rej) => {
     canvas.toBlob(b => b ? res({ blob: b, dataUrl: canvas.toDataURL('image/png') }) : rej(new Error('toBlob')), 'image/png');
   }));
 }
@@ -902,26 +945,34 @@ function escapeHTML(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-function handleAdminLogin() {
-  const pwd = document.getElementById('admin-password').value;
-  if (!pwd) return;
-  adminLoginBtn.disabled = true;
+function renderGoogleButton(n = 0) {
+  const box = document.getElementById('google-signin-btn');
+  if (!box) return;
+  if (!GOOGLE_CLIENT_ID) { box.textContent = '尚未設定 Google 登入（VITE_GOOGLE_CLIENT_ID）'; return; }
+  if (!window.google || !window.google.accounts) {
+    box.textContent = 'Google 登入元件載入中…';
+    if (n < 20) setTimeout(() => renderGoogleButton(n + 1), 500);
+    else box.textContent = '無法載入 Google 登入元件，請檢查網路或瀏覽器設定後重新整理。';
+    return;
+  }
+  if (!googleInited) {
+    window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential, auto_select: false });
+    googleInited = true;
+  }
+  box.innerHTML = '';
+  window.google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', text: 'signin_with', locale: 'zh-TW' });
+}
+
+function handleGoogleCredential(resp) {
+  adminIdToken = resp.credential || '';
   showLoadingModal('登入驗證中...');
- 
-  callBackend('adminLogin', { password: pwd })
-    .then((data) => {
-      adminLoginBtn.disabled = false;
-      onAdminLoginSuccess(data);
-    })
-    .catch((e) => {
-      adminLoginBtn.disabled = false;
-      onAdminLoginFail(e);
-    });
+  callBackend('adminLogin', {})
+    .then(onAdminLoginSuccess)
+    .catch((e) => { adminIdToken = ''; onAdminLoginFail(e); });
 }
 
 function onAdminLoginSuccess(data) {
   hideModal();
-  adminPassword = document.getElementById('admin-password').value;
   document.getElementById('admin-login-modal').classList.add('hidden');
   document.getElementById('admin-panel').style.display = 'block';
   const s = data.settings;
@@ -945,12 +996,12 @@ function onAdminLoginSuccess(data) {
 }
 
 function onAdminLoginFail(e) {
-  showModal('驗證失敗: ' + escapeHTML(e.message), 2000);
+  showModal('<h3 style="color:#D14343">登入失敗</h3>' + escapeHTML(e.message));
 }
 
 function closeAdminPanel() {
   document.getElementById('admin-panel').style.display = 'none';
-  adminPassword = '';
+  adminIdToken = '';
 }
 
 function showAdminTab(tab) {
@@ -1010,12 +1061,12 @@ function addClassRow() {
 }
 
 function loadReviewData() {
-  if (!adminPassword) return;
+  if (!adminIdToken) return;
   const tbody = document.getElementById('review-table-body');
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">載入中...</td></tr>';
   refreshReviewBtn.disabled = true;
  
-  callBackend('getPriorityCandidates', { password: adminPassword })
+  callBackend('getPriorityCandidates', {})
     .then((candidates) => {
       refreshReviewBtn.disabled = false;
       renderReviewTable(candidates);
@@ -1076,7 +1127,7 @@ function updateStatus(btnElement, rowIndex, newStatus) {
     const buttons = row.querySelectorAll('button');
     buttons.forEach(b => b.disabled = true);
 
-    callBackend('updateCandidateStatus', { password: adminPassword, rowIndex, newStatus, note })
+    callBackend('updateCandidateStatus', { rowIndex, newStatus, note })
       .then(() => {
         buttons.forEach(b => b.disabled = false);
         const badge = row.cells[3].querySelector('.status-badge');
@@ -1096,7 +1147,7 @@ function handleClearAllData() {
     clearAllDataBtn.disabled = true;
     showLoadingModal('正在執行資料抹除...');
    
-    callBackend('clearAllData', { password: adminPassword })
+    callBackend('clearAllData', {})
       .then(() => {
         clearAllDataBtn.disabled = false;
         showModal('✅ 系統已重置完畢', 2000);
@@ -1109,11 +1160,11 @@ function handleClearAllData() {
 }
 
 function initLotteryTab() {
-  if (!adminPassword) return;
+  if (!adminIdToken) return;
   const select = document.getElementById('lottery-grade-select');
   select.innerHTML = '<option>載入中...</option>';
  
-  callBackend('getLotteryGrades', { password: adminPassword })
+  callBackend('getLotteryGrades', {})
     .then((grades) => {
       select.innerHTML = '<option value="">請選擇開獎年級</option>';
       grades.forEach(g => { select.add(new Option(g, g)); });
@@ -1177,7 +1228,7 @@ function loadLotteryParticipants() {
   summary.innerHTML = '即時數據計算中...';
   btnRun.disabled = true;
  
-  callBackend('getLotteryParticipants', { password: adminPassword, selectedGrade: grade })
+  callBackend('getLotteryParticipants', { selectedGrade: grade })
     .then((data) => {
       lotteryAlreadyDrawn = !!data.alreadyDrawn;
       summary.innerHTML = (lotteryAlreadyDrawn ? '<div style="font-weight:700;margin-bottom:6px;">此年級已完成抽籤，下方為已存檔的結果。</div>' : '') + `
@@ -1199,7 +1250,7 @@ function loadLotteryParticipants() {
       btnRun.disabled = false;
       document.getElementById('lottery-download-btn').disabled = true;
       if (lotteryAlreadyDrawn) {
-        return callBackend('getLotteryResult', { password: adminPassword, selectedGrade: grade })
+        return callBackend('getLotteryResult', { selectedGrade: grade })
           .then((saved) => { if (saved) renderLotteryResults(saved, grade); });
       }
     })
@@ -1250,7 +1301,7 @@ function runLottery() {
           flashIndex++;
         }, 100);
        
-        callBackend('performLottery', { password: adminPassword, selectedGrade: grade, studentsPerClass: count, overwrite: lotteryAlreadyDrawn })
+        callBackend('performLottery', { selectedGrade: grade, studentsPerClass: count, overwrite: lotteryAlreadyDrawn })
           .then((results) => {
             setTimeout(() => {
               clearInterval(flashInterval);
@@ -1325,12 +1376,12 @@ function downloadLotteryResult() {
   btn.innerText = "正在處理並備份中...";
   showLoadingModal("正在產製精美公告圖檔...");
   
-  html2canvas(element, {
+  loadHtml2canvas().then(h2c => h2c(element, {
     backgroundColor: null,
     scale: 2,
     useCORS: true,
     windowWidth: element.scrollWidth
-  }).then(canvas => {
+  })).then(canvas => {
     const dataUrl = canvas.toDataURL('image/png');
     const fileName = `【公告】${grade}_${new Date().getTime()}.png`;
     try {
@@ -1340,7 +1391,7 @@ function downloadLotteryResult() {
       link.click();
     } catch(e) {}
    
-    callBackend('saveLotteryImageToDrive', { password: adminPassword, base64Data: dataUrl, fileName })
+    callBackend('saveLotteryImageToDrive', { base64Data: dataUrl, fileName })
       .then((res) => {
         hideModal();
         btn.disabled = false;
@@ -1357,7 +1408,7 @@ function downloadLotteryResult() {
 }
 
 function handleSaveSettings() {
-  if (!adminPassword) return alert('連線逾時，請重新登入');
+  if (!adminIdToken) return alert('連線逾時，請重新登入');
   saveSettingsBtn.disabled = true;
   const formData = {
     settings: {
@@ -1380,7 +1431,7 @@ function handleSaveSettings() {
 }
 
 function handleSaveClasses() {
-  if (!adminPassword) return alert('連線逾時，請重新登入');
+  if (!adminIdToken) return alert('連線逾時，請重新登入');
   saveClassesBtn.disabled = true;
   handleSaveSettings();
 }
@@ -1399,7 +1450,7 @@ function saveAdminDataGeneric(formData) {
  
   formData.classes = classes;
  
-  callBackend('saveAdminData', { password: adminPassword, formData })
+  callBackend('saveAdminData', { formData })
     .then(() => {
       saveSettingsBtn.disabled = false;
       saveClassesBtn.disabled = false;
