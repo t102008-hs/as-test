@@ -296,3 +296,5 @@ select { background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xml
 .consent-row input[type="checkbox"]:focus { background: transparent; box-shadow: none; }
 .radio-card:has(input:focus-visible) { outline: 3px solid #3A7CB8; outline-offset: 2px; }
 .consent-row { align-items: center; }
+
+.turnstile-box { display: flex; justify-content: center; margin: 14px 0 4px; min-height: 65px; }
