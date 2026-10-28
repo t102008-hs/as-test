@@ -10,7 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap">
   <!-- 保留你原本用於抽籤截圖的函式庫 -->
-  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E📚%3C/text%3E%3C/svg%3E">
 </head>
 <body>
@@ -111,6 +112,8 @@
             <label class="consent-row"><input type="checkbox" id="consent-checkbox"><span>我已了解：本表單蒐集之學生姓名、班級、聯絡電話及證明文件，僅用於課後班報名、資格審查與抽籤作業，作業完成後將依規定處理。</span></label>
             <small aria-live="polite" class="error-message" id="consent-error"></small>
           </div>
+          <div id="turnstile-box" class="turnstile-box"></div>
+          <small aria-live="polite" class="error-message" id="turnstile-error"></small>
           <div class="step-actions">
             <button type="button" id="submit-registration-button" class="button primary">確認送出報名</button>
             <button type="button" id="step3-back" class="button text">返回修改／新增孩子</button>
@@ -157,10 +160,8 @@
     <div role="dialog" aria-modal="true" class="modal-content">
       <button type="button" aria-label="關閉" class="close-button" onclick="document.getElementById('admin-login-modal').classList.add('hidden')">&times;</button>
       <h3>管理員登入</h3>
-      <div class="form-group" style="text-align: left; margin-top:20px;">
-        <input type="password" id="admin-password" placeholder="請輸入管理員密碼" onkeydown="if(event.key==='Enter') handleAdminLogin()">
-      </div>
-      <button id="admin-login-btn" class="button primary">登入</button>
+      <p style="margin-top:12px; color:#5A6678; font-size:0.92em;">請使用已授權的 Google 帳號登入。</p>
+      <div id="google-signin-btn" style="display:flex; justify-content:center; margin:20px 0 8px; min-height:44px;"></div>
     </div>
   </div>
  
@@ -331,7 +332,7 @@
       </div>
     </div>
   </div>
-  <a id="admin-trigger" onclick="document.getElementById('admin-login-modal').classList.remove('hidden')">管理員登入</a>
+  <a id="admin-trigger" role="button" tabindex="0">管理員登入</a>
  
   <div id="message-modal" class="modal hidden">
     <div role="dialog" aria-modal="true" class="modal-content">
