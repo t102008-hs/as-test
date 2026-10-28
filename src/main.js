@@ -66,7 +66,6 @@ async function prepareFile(file) {
 
 // 供原本程式碼做全域綁定
 window.showPage = showPage;
-window.handleAdminLogin = handleAdminLogin;
 window.closeAdminPanel = closeAdminPanel;
 window.showAdminTab = showAdminTab;
 window.addClassRow = addClassRow;
