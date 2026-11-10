@@ -5,7 +5,8 @@
 import { OAuth2Client } from 'google-auth-library';
 
 const PUBLIC_ACTIONS = new Set([
-  'getInitialData', 'getRegistrationStatusAndTimes', 'processRegistration', 'processResubmission', 'queryRegistration'
+  'getInitialData', 'getRegistrationStatusAndTimes', 'processRegistration', 'processResubmission', 'queryRegistration',
+  'updateRegistration', 'cancelRegistration'
 ]);
 const ADMIN_ACTIONS = new Set([
   'adminLogin', 'saveAdminData', 'getPriorityCandidates', 'updateCandidateStatus', 'getLotteryGrades',
