@@ -26,6 +26,7 @@
       <div id="registrationStatusMessage" class="section hidden" style="text-align: center;">
         <h3 id="statusText" style="color: #D14343;"></h3>
         <p id="timeInfo" style="color: #6B7788; font-weight:500;"></p>
+        <div id="status-extra" class="status-extra"></div>
       </div>
       <div id="deadline-section" class="deadline-section hidden">
         <span id="deadline-display" class="deadline-text"></span>
@@ -35,6 +36,13 @@
 
         <!-- 第 1 步：家長聯絡方式 -->
         <div id="step-1" class="reg-step active">
+          <div id="draft-notice" class="draft-notice hidden" role="status">
+            <p id="draft-text"></p>
+            <div class="draft-actions">
+              <button type="button" id="draft-continue" class="button primary">繼續填寫</button>
+              <button type="button" id="draft-clear" class="button text">清除重填</button>
+            </div>
+          </div>
           <div id="announcement-a" class="announcement-area hidden"></div>
           <div class="section">
             <h3 class="step-title">家長聯絡方式</h3>
@@ -154,6 +162,11 @@
         <h3>查詢結果</h3>
       </div>
     </div>
+    <div id="faq-area" class="faq-area hidden">
+      <h3 class="step-title">常見問題</h3>
+      <div id="faq-list"></div>
+      <div id="contact-info" class="contact-info hidden"></div>
+    </div>
   </div>
  
   <div id="admin-login-modal" class="modal hidden">
@@ -190,6 +203,29 @@
     </div>
   </div>
  
+  <div id="edit-modal" class="modal hidden">
+    <div role="dialog" aria-modal="true" class="modal-content">
+      <button type="button" aria-label="關閉" class="close-button" onclick="document.getElementById('edit-modal').classList.add('hidden')">&times;</button>
+      <h3>修改報名資料</h3>
+      <p style="font-size:0.9em; color:#5A6678; margin-bottom:16px;">可修改姓名、性別、年級班級。若要更改優先資格，請先取消報名後重新報名。</p>
+      <div class="form-group" style="text-align:left;">
+        <label for="edit-name">學生姓名</label>
+        <input type="text" id="edit-name">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label for="edit-gender">性別</label>
+        <select id="edit-gender"><option value="">請選擇性別</option></select>
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label for="edit-grade">年級</label>
+        <select id="edit-grade"><option value="">請選擇年級</option></select>
+        <select id="edit-class" class="hidden" style="margin-top:8px;"><option value="">請選擇班級</option></select>
+      </div>
+      <small aria-live="polite" class="error-message" id="edit-error"></small>
+      <button type="button" id="edit-save-btn" class="button primary">儲存修改</button>
+    </div>
+  </div>
+
   <div id="doc-preview-modal" class="modal hidden">
     <div role="dialog" aria-modal="true" class="modal-content doc-modal-content">
       <div class="doc-header">
@@ -226,6 +262,9 @@
           <div class="form-group"><label>性別選項 (逗號分隔)</label><input type="text" id="adm-gender"></div>
           <div class="form-group"><label>優先錄取資格選項 (逗號分隔)</label><input type="text" id="adm-prio-opt"></div>
           <div class="form-group"><label>優先資格類別 (逗號分隔，家長選「有」後以單選呈現；留空則不顯示)</label><input type="text" id="adm-prio-cat" placeholder="例如：低收入戶,中低收入戶,身心障礙,原住民"></div>
+          <div class="form-group"><label>承辦人聯絡方式（顯示在頁面下方與截止畫面）</label><input type="text" id="adm-contact" placeholder="例如：教務處 03-xxx-xxxx 分機 xxx（週一至週五 8:00–16:00）"></div>
+          <div class="form-group"><label>抽籤與公告說明（顯示在截止畫面）</label><input type="text" id="adm-draw" placeholder="例如：預計 ○月○日抽籤，結果將於當日在本系統公告"></div>
+          <div class="form-group"><label>常見問題（每題一段、段落間空一行；第一行是問題，其後是答案）</label><textarea id="adm-faq" rows="9" placeholder="忘記報名編號怎麼辦？&#10;不需要編號，到「查詢」輸入手機號碼與孩子姓名即可。&#10;&#10;打錯資料怎麼辦？&#10;截止前可在「查詢」找到該筆報名，按「修改資料」。"></textarea></div>
           <div class="form-group"><label>優先錄取說明 (可填寫 HTML)</label><textarea id="adm-prio-desc"></textarea></div>
           <div class="form-group"><label>公告 A (顯示於報名頁)</label><textarea id="adm-ann-a"></textarea></div>
           <div class="form-group"><label>公告 B (顯示於查詢頁)</label><textarea id="adm-ann-b"></textarea></div>
