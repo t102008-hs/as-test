@@ -64,6 +64,144 @@ async function prepareFile(file) {
   return { base64: dataUrl.split(',')[1], name: file.name.replace(/\.[^.]+$/, '') + '.jpg', type: 'image/jpeg' };
 }
 
+// ---------- 草稿暫存（sessionStorage，關閉分頁即清除；不含證明文件檔案）----------
+function loadDraftEarly() {
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null');
+    if (d && Date.now() - d.t < 6 * 3600 * 1000 && (d.phone || (d.kids && d.kids.length))) { pendingDraft = d; draftPending = true; }
+  } catch (e) {}
+}
+function saveDraft() {
+  if (draftPending) return;
+  try {
+    const phone = parentPhoneInput ? parentPhoneInput.value.replace(/\D/g, '') : '';
+    if (!phone && previewData.length === 0) { sessionStorage.removeItem(DRAFT_KEY); return; }
+    const kids = previewData.map(s => ({ name: s.name, grade: s.grade, classVal: s.classVal, class: s.class, gender: s.gender, priority: s.priority, priorityCategory: s.priorityCategory, hadFile: !!s.file }));
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ phone, kids, t: Date.now() }));
+  } catch (e) {}
+}
+function clearDraft() { try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+function showDraftNotice() {
+  if (!pendingDraft) return;
+  const usable = (pendingDraft.kids || []).filter(k => !k.hadFile);
+  const dropped = (pendingDraft.kids || []).length - usable.length;
+  const box = document.getElementById('draft-notice');
+  const text = document.getElementById('draft-text');
+  if (!box || !text) return;
+  text.textContent = '找到您上次尚未送出的資料' + (usable.length ? `（已加入 ${usable.length} 位孩子）` : '') +
+    (dropped ? `；另有 ${dropped} 位需附證明文件的孩子，文件無法保存，請重新加入。` : '。');
+  box.classList.remove('hidden');
+}
+function continueDraft() {
+  const d = pendingDraft; if (!d) return;
+  draftPending = false; pendingDraft = null;
+  parentPhoneInput.value = d.phone || '';
+  previewData = (d.kids || []).filter(k => !k.hadFile).map(k => ({ ...k, phone: d.phone, file: null }));
+  document.getElementById('draft-notice').classList.add('hidden');
+  renderPreview();
+  if (/^09\d{8}$/.test(d.phone || '')) goStep(previewData.length ? 3 : 2);
+}
+function discardDraft() {
+  draftPending = false; pendingDraft = null;
+  clearDraft();
+  document.getElementById('draft-notice').classList.add('hidden');
+}
+
+// ---------- 截止畫面資訊 / 常見問題 ----------
+function renderStatusExtras() {
+  const box = document.getElementById('status-extra');
+  if (!box) return;
+  if (!lastStatus || lastStatus.status === 'open') { box.innerHTML = ''; return; }
+  const parts = [];
+  if (settings.drawInfo) parts.push(`<div class="status-info"><strong>抽籤與公告</strong><br>${escapeHTML(settings.drawInfo)}</div>`);
+  if (settings.contactInfo) parts.push(`<div class="status-info"><strong>聯絡承辦人</strong><br>${escapeHTML(settings.contactInfo)}</div>`);
+  if (lastStatus.status === 'closed_after') parts.push('<button type="button" class="button primary" id="status-go-query">前往查詢報名結果</button>');
+  box.innerHTML = parts.join('');
+  const go = document.getElementById('status-go-query');
+  if (go) go.addEventListener('click', () => showPage('query'));
+  renderFaq();
+}
+
+function renderFaq() {
+  const area = document.getElementById('faq-area');
+  const list = document.getElementById('faq-list');
+  const contact = document.getElementById('contact-info');
+  if (!area || !list || !contact) return;
+  const blocks = String(settings.faqText || '').split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  list.innerHTML = blocks.map(b => {
+    const lines = b.split('\n');
+    const q = lines.shift().replace(/^\s*(Q|問)\s*[:：]\s*/i, '');
+    const a = lines.join('\n').replace(/^\s*(A|答)\s*[:：]\s*/i, '');
+    return `<details class="faq-item"><summary>${escapeHTML(q)}</summary><div class="faq-answer">${escapeHTML(a)}</div></details>`;
+  }).join('');
+  // 截止畫面上方已顯示聯絡方式，這裡就不重複
+  const showContact = !!settings.contactInfo && !(lastStatus && lastStatus.status !== 'open');
+  contact.textContent = showContact ? '聯絡承辦人：' + settings.contactInfo : '';
+  contact.classList.toggle('hidden', !showContact);
+  area.classList.toggle('hidden', blocks.length === 0 && !showContact);
+}
+
+// ---------- 家長自助修改／取消（截止前、尚未抽籤）----------
+function updateEditClasses(grade) {
+  const sel = document.getElementById('edit-class');
+  const list = ((classSettings && classSettings.classes) || {})[grade] || [];
+  populateSelect(sel, list);
+  sel.classList.toggle('hidden', list.length === 0);
+}
+
+function openEditModal(s) {
+  if (!s) return;
+  editTarget = { id: s.id, phone: lastQueryPhone };
+  document.getElementById('edit-error').textContent = '';
+  document.getElementById('edit-name').value = s.name;
+  populateSelect(document.getElementById('edit-gender'), settings.genderOptions);
+  document.getElementById('edit-gender').value = s.gender || '';
+  populateSelect(document.getElementById('edit-grade'), (classSettings && classSettings.grades) || []);
+  const grade = ((classSettings && classSettings.grades) || []).find(g => String(s.class).startsWith(g)) || '';
+  document.getElementById('edit-grade').value = grade;
+  updateEditClasses(grade);
+  document.getElementById('edit-class').value = String(s.class).slice(grade.length);
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+async function saveEdit() {
+  if (!editTarget) return;
+  const err = document.getElementById('edit-error');
+  const name = document.getElementById('edit-name').value.trim();
+  const gender = document.getElementById('edit-gender').value;
+  const grade = document.getElementById('edit-grade').value;
+  const classSel = document.getElementById('edit-class');
+  const classVal = classSel.classList.contains('hidden') ? '' : classSel.value;
+  err.textContent = '';
+  if (!name) { err.textContent = '請輸入學生姓名'; return; }
+  if (!gender) { err.textContent = '請選擇性別'; return; }
+  if (!grade) { err.textContent = '請選擇年級'; return; }
+  if (!classSel.classList.contains('hidden') && !classVal) { err.textContent = '請選擇班級'; return; }
+  const btn = document.getElementById('edit-save-btn');
+  btn.disabled = true;
+  try {
+    await callBackend('updateRegistration', { studentInfo: { phone: editTarget.phone, id: editTarget.id }, fields: { name, gender, grade, classVal } });
+    document.getElementById('edit-modal').classList.add('hidden');
+    showModal('<h3 style="color:#2F855A;">已更新報名資料</h3>', 1800);
+    if (queryNameInput) queryNameInput.value = editTarget.id; // 改名後改用編號重新查詢
+    setTimeout(handleQuery, 1900);
+  } catch (e) { err.textContent = e.message; }
+  finally { btn.disabled = false; }
+}
+
+function cancelOwnRegistration(s) {
+  if (!s) return;
+  showConfirmModal(`確定要取消「${escapeHTML(s.name)}」的報名嗎？<br><span style="font-size:0.9em;color:#5A6678;">取消後無法復原，若仍要參加需重新報名。</span>`, () => {
+    showLoadingModal('正在取消');
+    callBackend('cancelRegistration', { studentInfo: { phone: lastQueryPhone, id: s.id } })
+      .then(() => {
+        showModal('<h3 style="color:#2F855A;">已取消報名</h3>', 1800);
+        if (queryResultsArea) { queryResultsArea.innerHTML = ''; queryResultsArea.classList.add('hidden'); }
+      })
+      .catch(showError);
+  });
+}
+
 // 供原本程式碼做全域綁定
 window.showPage = showPage;
 window.closeAdminPanel = closeAdminPanel;
@@ -78,6 +216,12 @@ window.hideModal = hideModal;
 window.toggleSound = toggleSound;
 window.showDocPreview = showDocPreview;
 let lotteryAlreadyDrawn = false;
+let lastStatus = null;
+let lastQueryResults = [];
+let pendingDraft = null;
+let draftPending = false;
+let editTarget = null;
+const DRAFT_KEY = 'as_draft';
 let lastQueryPhone = '';
 let reviewCandidates = [];
 let currentStep = 1;
@@ -228,8 +372,20 @@ document.addEventListener('DOMContentLoaded', () => {
   callBackend('getInitialData')
     .then(initPageData)
     .catch(showError);
+  loadDraftEarly();
+  history.replaceState({ step: 1 }, '');
   setupEventListeners();
   renderPreview();
+  showDraftNotice();
+  window.addEventListener('popstate', (e) => {
+    let n = (e.state && e.state.step) || 1;
+    if (n === 3 && previewData.length === 0) n = 1;
+    if (n === 4 && !document.getElementById('receipt-card')) n = 1;
+    goStep(n, { fromPop: true });
+  });
+  window.addEventListener('beforeunload', (e) => {
+    if (previewData.length > 0 && currentStep < 4) { e.preventDefault(); e.returnValue = ''; }
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     ['message-modal', 'admin-login-modal', 'resubmit-modal', 'confirm-modal'].forEach(id => {
@@ -279,6 +435,11 @@ function setupEventListeners() {
   }
   const $ = (id) => document.getElementById(id);
   if ($('step1-next')) $('step1-next').addEventListener('click', handleStep1Next);
+  if (parentPhoneInput) parentPhoneInput.addEventListener('input', saveDraft);
+  if ($('draft-continue')) $('draft-continue').addEventListener('click', continueDraft);
+  if ($('draft-clear')) $('draft-clear').addEventListener('click', discardDraft);
+  if ($('edit-save-btn')) $('edit-save-btn').addEventListener('click', saveEdit);
+  if ($('edit-grade')) $('edit-grade').addEventListener('change', () => updateEditClasses($('edit-grade').value));
   if (parentPhoneInput) parentPhoneInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleStep1Next(); });
   if ($('add-another-button')) $('add-another-button').addEventListener('click', handleAddAnother);
   if ($('step2-next')) $('step2-next').addEventListener('click', handleStep2Next);
@@ -322,7 +483,11 @@ function setupEventListeners() {
   if(submitResubmitBtn) submitResubmitBtn.addEventListener('click', submitResubmission);
   if(queryResultsArea) queryResultsArea.addEventListener('click', (e) => {
     const b = e.target.closest('.resubmit-btn');
-    if (b) handleResubmitClick(b.dataset.phone, b.dataset.id);
+    if (b) { handleResubmitClick(b.dataset.phone, b.dataset.id); return; }
+    const eb = e.target.closest('.edit-btn');
+    if (eb) { openEditModal(lastQueryResults.find(x => x.id === eb.dataset.id)); return; }
+    const cb = e.target.closest('.cancel-btn');
+    if (cb) cancelOwnRegistration(lastQueryResults.find(x => x.id === cb.dataset.id));
   });
   const chips = document.getElementById('review-chips');
   if (chips) chips.addEventListener('click', (e) => {
@@ -352,6 +517,8 @@ function handleStatus(result) {
     timeInfoElement.innerText = result.status === 'closed_before' ? `預計開放時間：${result.startTime}` : `已於 ${result.endTime} 截止`;
     disableRegistrationForm();
   }
+  lastStatus = result;
+  renderStatusExtras();
 }
 
 function showPage(page) {
@@ -417,6 +584,8 @@ function loadSettings(loadedSettings) {
       queryNameGroup.classList.remove('hidden');
     }
   }
+  renderStatusExtras();
+  renderFaq();
 }
 
 function loadClassSettings(loadedClassSettings) {
@@ -491,7 +660,8 @@ function sanitizePhoneNumber(event) {
 // ---------- 分步流程 ----------
 function formatPhone(p) { return String(p).replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3'); }
 
-function goStep(n) {
+function goStep(n, opts = {}) {
+  if (!opts.fromPop && n !== currentStep) history.pushState({ step: n }, '');
   currentStep = n;
   document.querySelectorAll('.reg-step').forEach(el => el.classList.toggle('active', el.id === 'step-' + n));
   const rp = document.getElementById('review-phone');
@@ -631,6 +801,7 @@ function childCardHtml(s, i) {
 }
 
 function renderPreview() {
+  saveDraft();
   const html = previewData.map(childCardHtml).join('');
   const added = document.getElementById('added-children');
   if (added) added.innerHTML = previewData.length ? `<h3 class="step-title">已加入的孩子（${previewData.length} 位）</h3>${html}` : '';
@@ -675,6 +846,7 @@ function handleRegistrationResponse(response, phone) {
     lastRegPhone = phone || '';
     previewData = [];
     parentPhoneInput.value = '';
+    clearDraft();
     const consent = document.getElementById('consent-checkbox');
     if (consent) consent.checked = false;
     showReceipt(response.receipts || []);
@@ -816,6 +988,7 @@ function displayQueryResults(results) {
   queryResultsArea.innerHTML = '<h3>查詢結果</h3>';
   queryResultsArea.classList.remove('hidden');
   queryResultsArea.classList.add('has-content');
+  lastQueryResults = results;
   if (results.length === 0) {
     queryResultsArea.innerHTML += '<p class="placeholder-text">查無資料，請確認手機號碼與孩子姓名是否與報名時相同。</p>';
     return;
@@ -831,7 +1004,8 @@ function displayQueryResults(results) {
       <div class="data-row"><span class="label">時間</span><span class="value" style="font-size:0.9em; color:#6B7788;">${escapeHTML(String(s.registrationTime))}</span></div>
       <div class="data-row" style="margin-top:6px;"><span class="label">狀態</span><span class="value"><span class="status-badge ${st.cls}">${escapeHTML(st.text)}</span><span class="status-sub">${escapeHTML(st.sub)}</span></span></div>
       ${s.note && (s.status === '請補件' || s.status === '不符合') ? `<div class="note-text">審查說明：${escapeHTML(s.note)}</div>` : ''}
-      ${st.action ? `<button type="button" class="resubmit-btn" style="margin-top:10px;width:100%;" data-id="${escapeHTML(s.id)}" data-phone="${escapeHTML(lastQueryPhone)}">上傳補件文件</button>` : ''}`;
+      ${st.action ? `<button type="button" class="resubmit-btn" style="margin-top:10px;width:100%;" data-id="${escapeHTML(s.id)}" data-phone="${escapeHTML(lastQueryPhone)}">上傳補件文件</button>` : ''}
+      ${s.canModify ? `<div class="card-actions"><button type="button" class="edit-btn" data-id="${escapeHTML(s.id)}">修改資料</button><button type="button" class="cancel-btn" data-id="${escapeHTML(s.id)}">取消報名</button></div>` : ''}`;
     queryResultsArea.appendChild(card);
   });
   setTimeout(() => {
@@ -981,6 +1155,9 @@ function onAdminLoginSuccess(data) {
   document.getElementById('adm-gender').value = s.genderOptions;
   document.getElementById('adm-prio-opt').value = s.priorityOptions;
   document.getElementById('adm-prio-cat').value = s.priorityCategories || '';
+  document.getElementById('adm-contact').value = s.contactInfo || '';
+  document.getElementById('adm-draw').value = s.drawInfo || '';
+  document.getElementById('adm-faq').value = s.faqText || '';
   document.getElementById('adm-prio-desc').value = s.priorityDesc;
   document.getElementById('adm-ann-a').value = s.announcementA;
   document.getElementById('adm-ann-b').value = s.announcementB;
@@ -1417,6 +1594,9 @@ function handleSaveSettings() {
       genderOptions: document.getElementById('adm-gender').value,
       priorityOptions: document.getElementById('adm-prio-opt').value,
       priorityCategories: document.getElementById('adm-prio-cat').value,
+      contactInfo: document.getElementById('adm-contact').value,
+      drawInfo: document.getElementById('adm-draw').value,
+      faqText: document.getElementById('adm-faq').value,
       priorityDesc: document.getElementById('adm-prio-desc').value,
       announcementA: document.getElementById('adm-ann-a').value,
       announcementB: document.getElementById('adm-ann-b').value,
